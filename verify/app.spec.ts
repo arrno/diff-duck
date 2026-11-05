@@ -69,6 +69,27 @@ test("short and long pages reserve the same scrollbar space", async ({ page }) =
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).scrollbarGutter)).toBe("stable");
 });
 
+test("the person menu opens, and keeps nothing yet", async ({ page }) => {
+  const requests: string[] = [];
+  page.on("request", (r) => { if (r.method() !== "GET") requests.push(r.url()); });
+  await page.goto(app);
+  await page.getByRole("button", { name: "Model settings" }).click();
+  const menu = page.getByRole("dialog", { name: "Model settings" });
+  await expect(menu.getByLabel("Provider")).toHaveValue("Anthropic");
+  await menu.getByLabel("Provider").selectOption("OpenAI");
+  await menu.getByLabel("API key").fill("not-a-real-key");
+  await noViolations(page);
+  await menu.getByRole("button", { name: "Save" }).click();
+  await expect(menu).toHaveCount(0);
+  expect(requests).toEqual([]);
+  const stored = await page.evaluate(() => JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage }));
+  expect(stored).not.toContain("not-a-real-key");
+  await page.getByRole("button", { name: "Model settings" }).click();
+  await expect(menu.getByLabel("API key")).toHaveValue("");
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+});
+
 test("a path that is not a repo says so", async ({ page }) => {
   await page.goto(`${app}#/new`);
   await page.getByLabel("Git repo").fill("/no/such/place");
