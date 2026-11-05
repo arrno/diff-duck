@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { AlertTriangle, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
+import { SiteFooter } from "@/components/SiteFooter";
 import { Outcomes, ScopeFilters } from "@/components/diff/Outcomes";
 import { UnitList } from "@/components/diff/Unit";
 import { ViewContext, type ViewState } from "@/components/diff/ViewState";
@@ -23,6 +24,18 @@ function ThemeToggle() {
     <Button type="button" variant="outline" size="icon" aria-label="Toggle theme" onClick={() => setTheme(dark ? "light" : "dark")}>
       {dark ? <Sun aria-hidden /> : <Moon aria-hidden />}
     </Button>
+  );
+}
+
+function DuckIcon() {
+  return (
+    <svg aria-hidden viewBox="0 0 32 32" className="size-7">
+      <path fill="#FBBF24" d="M3 13c1.5 3 4.5 4.2 8.5 4L20 17c3.5 0 6.5 2.2 6.5 5.2 0 3.6-4 6-9.5 6-7.5 0-13.5-4.2-14-15.2z" />
+      <circle cx="20" cy="11" r="6.5" fill="#FBBF24" />
+      <path fill="#F97316" d="M26 8.8 31.5 11 26 13.8z" />
+      <circle cx="21.8" cy="9.5" r="1.2" fill="#1C1917" />
+      <path fill="none" stroke="#D97706" strokeLinecap="round" strokeWidth="1.8" d="M9.5 20.5c3 3 7.5 3 10.5-.3" />
+    </svg>
   );
 }
 
@@ -66,19 +79,25 @@ export function App({ model }: { model: CompressedDiff }) {
 
   return (
     <ViewContext.Provider value={view}>
-      <a href="#changes" className="sr-only focus:not-sr-only focus:absolute focus:m-2 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground">
+      <a href="#changes" className="sr-only focus:not-sr-only focus:absolute focus:z-[60] focus:m-2 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground">
         Skip to changed code
       </a>
-      <div className="mx-auto max-w-screen-2xl space-y-8 px-4 py-6 md:px-8 md:py-8">
-        <header className="space-y-4">
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0 space-y-1">
-              <h1 className="text-sm font-medium text-muted-foreground">Compressed diff</h1>
-              <p className="font-mono text-xs break-words text-muted-foreground">
-                {model.repository} · {model.base} ({model.baseSha.slice(0, 8)}) → {model.head} ({model.headSha.slice(0, 8)})
-              </p>
-            </div>
-            <ThemeToggle />
+      <header className="sticky top-0 z-50 border-b bg-background/85 backdrop-blur">
+        <div className="mx-auto flex h-14 max-w-screen-2xl items-center justify-between gap-4 px-4 md:px-8">
+          <span className="flex items-center gap-2 text-base font-semibold tracking-tight">
+            <DuckIcon />
+            DuckDiff
+          </span>
+          <ThemeToggle />
+        </div>
+      </header>
+      <main className="mx-auto max-w-screen-2xl space-y-8 px-4 py-6 md:px-8 md:py-8">
+        <div className="space-y-4">
+          <div className="min-w-0 space-y-1">
+            <h1 className="text-sm font-medium text-muted-foreground">Compressed diff</h1>
+            <p className="font-mono text-xs break-words text-muted-foreground">
+              {model.repository} · {model.base} ({model.baseSha.slice(0, 8)}) → {model.head} ({model.headSha.slice(0, 8)})
+            </p>
           </div>
           {model.overview && <p data-testid="overview" className="max-w-4xl text-2xl leading-snug font-semibold">{model.overview}</p>}
           <p data-testid="stats" className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
@@ -86,7 +105,7 @@ export function App({ model }: { model: CompressedDiff }) {
             <span className="font-mono"><span className="text-add">+{model.added}</span> <span className="text-remove">−{model.removed}</span></span>
             <span>traced {model.coverage.tracedLines}/{model.coverage.changedLines} changed lines</span>
           </p>
-        </header>
+        </div>
 
         {(model.warnings ?? []).length > 0 && (
           <section data-testid="warnings" className="rounded-lg border border-warn bg-warn-soft p-4 text-sm">
@@ -105,7 +124,7 @@ export function App({ model }: { model: CompressedDiff }) {
           <section
             aria-labelledby="outcomes-heading"
             tabIndex={0}
-            className="space-y-3 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto lg:p-1"
+            className="space-y-3 lg:sticky lg:top-18 lg:max-h-[calc(100vh-5.5rem)] lg:self-start lg:overflow-y-auto lg:p-1"
           >
             <h2 id="outcomes-heading" className="text-lg font-medium">Outcomes</h2>
             <ScopeFilters
@@ -122,7 +141,7 @@ export function App({ model }: { model: CompressedDiff }) {
             />
           </section>
 
-          <section id="changes" aria-labelledby="changes-heading" tabIndex={-1} className="min-w-0 space-y-4 lg:pt-1">
+          <section id="changes" aria-labelledby="changes-heading" tabIndex={-1} className="min-w-0 scroll-mt-18 space-y-4 lg:pt-1">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 id="changes-heading" className="text-lg font-medium">What changed</h2>
               <div className="flex flex-wrap gap-2">
@@ -151,7 +170,8 @@ export function App({ model }: { model: CompressedDiff }) {
           Model: {model.generation.model}. Prompts: {model.generation.promptVariant}. {model.metrics.compressionRatio.toFixed(1)}x compression in the opening view.
           {" "}A summary explains apparent behavior; it does not verify the code is correct.
         </footer>
-      </div>
+      </main>
+      <SiteFooter />
     </ViewContext.Provider>
   );
 }
