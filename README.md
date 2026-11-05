@@ -6,6 +6,10 @@
 
 <p align="center"><strong>A compressed diff.</strong> Know what changed, and where, like a duck to water.</p>
 
+<p align="center">
+  <img src="docs/preview.png" alt="DiffDuck showing a change: a one-paragraph overview, outcomes on the left, and the package, type, and function tree on the right, each with a one-line description" width="900">
+</p>
+
 ## About
 
 A raw diff is a wall of red and green in file order. You have to read all of it to learn what it
