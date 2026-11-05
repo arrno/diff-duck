@@ -1,4 +1,4 @@
-// Command diff-duck turns the Git diff between two commits into a compressed diff.
+// Command diffduck turns the Git diff between two commits into a compressed diff.
 package main
 
 import (

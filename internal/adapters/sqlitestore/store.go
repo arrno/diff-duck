@@ -74,6 +74,17 @@ func Open(ctx context.Context, path string) (*Store, error) {
 // Close closes the database.
 func (s *Store) Close() error { return s.db.Close() }
 
+// Remove deletes the database at path along with SQLite's side files. Nothing may have it open.
+// A database that does not exist is not an error.
+func Remove(path string) error {
+	for _, suffix := range []string{"", "-wal", "-shm", "-journal"} {
+		if err := os.Remove(path + suffix); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("remove saved diffs: %w", err)
+		}
+	}
+	return nil
+}
+
 func columns(d *domain.SavedDiff) ([]any, error) {
 	var result []byte
 	if d.Result != nil {

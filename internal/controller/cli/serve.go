@@ -29,26 +29,16 @@ type serveOptions struct {
 	port   int
 	dbPath string
 	noOpen bool
+	args   []string
 }
 
 func runServe(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	var opts serveOptions
-	fs := flag.NewFlagSet("diff-duck serve", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	fs.IntVar(&opts.port, "port", defaultPort, "port on the loopback address; 0 picks a free one")
-	fs.StringVar(&opts.dbPath, "db", "", "database file (default: diff-duck/diffs.db in the user config directory)")
-	fs.BoolVar(&opts.noOpen, "no-open", false, "do not open a browser")
-	addModelFlags(fs, &opts.options)
-	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return exitOK
-		}
-		return exitUsage
+	fs := serveFlags(&opts, stderr, "diffduck serve")
+	if code, ok := parseServe(fs, args, &opts); !ok {
+		return code
 	}
-	if fs.NArg() != 0 || opts.concurrency < 1 || opts.port < 0 || opts.port > 65535 {
-		fs.Usage()
-		return exitUsage
-	}
+	opts.args = args
 	if err := serve(ctx, opts, stdout); err != nil {
 		fmt.Fprintln(stderr, "error:", printable(err.Error()))
 		return exitFailure
@@ -56,14 +46,40 @@ func runServe(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 	return exitOK
 }
 
-func serve(ctx context.Context, opts serveOptions, stdout io.Writer) error {
-	dbPath := opts.dbPath
-	if dbPath == "" {
-		base, err := os.UserConfigDir()
-		if err != nil {
-			return fmt.Errorf("locate config directory (use --db): %w", err)
+func serveFlags(opts *serveOptions, stderr io.Writer, name string) *flag.FlagSet {
+	fs := flag.NewFlagSet(name, flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	fs.IntVar(&opts.port, "port", defaultPort, "port on the loopback address; 0 picks a free one")
+	fs.StringVar(&opts.dbPath, "db", "", "database file (default: diffs.db in $"+homeEnv+", or diff-duck in the user config directory)")
+	fs.BoolVar(&opts.noOpen, "no-open", false, "do not open a browser")
+	addModelFlags(fs, &opts.options)
+	return fs
+}
+
+func parseServe(fs *flag.FlagSet, args []string, opts *serveOptions) (int, bool) {
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return exitOK, false
 		}
-		dbPath = filepath.Join(base, "diff-duck", "diffs.db")
+		return exitUsage, false
+	}
+	if fs.NArg() != 0 || opts.concurrency < 1 || opts.port < 0 || opts.port > 65535 {
+		fs.Usage()
+		return exitUsage, false
+	}
+	return 0, true
+}
+
+func serve(ctx context.Context, opts serveOptions, stdout io.Writer) error {
+	dir, err := home()
+	if err != nil {
+		return err
+	}
+	dbPath := defaultDB(dir)
+	if opts.dbPath != "" {
+		if dbPath, err = filepath.Abs(opts.dbPath); err != nil {
+			return err
+		}
 	}
 	store, err := sqlitestore.Open(ctx, dbPath)
 	if err != nil {
@@ -109,6 +125,14 @@ func serve(ctx context.Context, opts serveOptions, stdout io.Writer) error {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	url := fmt.Sprintf("http://127.0.0.1:%d/", port)
+	// Record this server so other commands can find it, unless another is already recorded.
+	if existing, _ := findServer(ctx, dir); existing == nil {
+		pid := os.Getpid()
+		if err := writeRecord(dir, serverRecord{PID: pid, Port: port, DB: dbPath, Args: opts.args}); err != nil {
+			return err
+		}
+		defer removeRecord(dir, pid)
+	}
 	fmt.Fprintf(stdout, "DiffDuck is running at %s\nSaved diffs: %s\nPress Ctrl+C to stop.\n", url, printable(dbPath))
 	if !opts.noOpen {
 		openBrowser(url)

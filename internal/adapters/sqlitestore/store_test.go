@@ -162,3 +162,25 @@ func TestFailRunningOnlyTouchesRunningDiffs(t *testing.T) {
 		t.Errorf("finished diff was changed: %+v", got)
 	}
 }
+
+func TestRemoveDeletesEverySavedDiff(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "diffs.db")
+	s, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Create(ctx, saved("one", time.UnixMilli(1000))); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	if err := Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := Remove(path); err != nil {
+		t.Fatalf("removing a missing database must succeed: %v", err)
+	}
+	if list, err := open(t, path).List(ctx); err != nil || len(list) != 0 {
+		t.Fatalf("got %v, %v; want an empty library", list, err)
+	}
+}

@@ -26,16 +26,30 @@ import (
 	"github.com/arrno/diff-duck/internal/services/ports"
 )
 
-const usage = `diff-duck turns the Git diff between two commits into a compressed diff.
+const usage = `DiffDuck turns the Git diff between two commits into a readable summary.
 
-Usage:
-  diff-duck [flags] <repo-url-or-path> <base> <head>
-  diff-duck serve [flags]
+The app:
+  diffduck up [flags]                       start the app in the background
+  diffduck down                             stop it
+  diffduck status                           say whether it is running, and where
+  diffduck reset [--yes]                    delete every saved diff
+  diffduck serve [flags]                    run the app in this terminal instead
 
-The first form writes compressed-diff.json and index.html to the output directory. The second
-opens the local web app. To analyze a directory named serve, write it as ./serve.
+Diffs (these start the app if it is not running):
+  diffduck diff [repo] [-f from] [-t to]    build a diff and open it (default: . HEAD~1 HEAD)
+  diffduck diff list [--json]               list saved diffs
+  diffduck diff open [id]                   open the app, or one diff, in the browser
+  diffduck diff delete <id>...              delete saved diffs
 
-Flags:
+Run "diffduck <command> -h" for a command's flags.
+
+Without the app:
+  diffduck [flags] <repo-url-or-path> <base> <head>
+
+This form writes compressed-diff.json and index.html to the output directory. To analyze a
+directory named like a command, write it as ./serve.
+
+Flags for that form:
 `
 
 // Exit codes.
@@ -45,6 +59,15 @@ const (
 	exitUsage       = 2
 	exitNoSummaries = 3
 )
+
+var commands = map[string]func(context.Context, []string, io.Writer, io.Writer) int{
+	"serve":  runServe,
+	"up":     runUp,
+	"down":   runDown,
+	"status": runStatus,
+	"reset":  runReset,
+	"diff":   runDiff,
+}
 
 type options struct {
 	out           string
@@ -61,11 +84,13 @@ type options struct {
 
 // Run executes the command and returns its exit code.
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	if len(args) > 0 && args[0] == "serve" {
-		return runServe(ctx, args[1:], stdout, stderr)
+	if len(args) > 0 {
+		if command, ok := commands[args[0]]; ok {
+			return command(ctx, args[1:], stdout, stderr)
+		}
 	}
 	opts := options{}
-	fs := flag.NewFlagSet("diff-duck", flag.ContinueOnError)
+	fs := flag.NewFlagSet("diffduck", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.StringVar(&opts.out, "out", "", "output directory (default: ./diff-duck-out/<base>..<head>)")
 	fs.BoolVar(&opts.structureOnly, "structure-only", false, "skip the model and output only structural facts")
@@ -75,22 +100,10 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		fs.PrintDefaults()
 	}
 
-	// Allow flags before, between, or after the positional arguments. A revision that begins
-	// with a dash is therefore read as a flag and never reaches git.
-	var positional []string
-	for rest := args; ; {
-		if err := fs.Parse(rest); err != nil {
-			if errors.Is(err, flag.ErrHelp) {
-				return exitOK
-			}
-			return exitUsage
-		}
-		rest = fs.Args()
-		if len(rest) == 0 {
-			break
-		}
-		positional = append(positional, rest[0])
-		rest = rest[1:]
+	// A revision that begins with a dash is read as a flag and never reaches git.
+	positional, code, ok := parseInterleaved(fs, args)
+	if !ok {
+		return code
 	}
 	if len(positional) != 3 {
 		fs.Usage()

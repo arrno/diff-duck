@@ -442,7 +442,7 @@ func TestUnknownScriptedBehaviorIsRejected(t *testing.T) {
 
 func TestProductionBinaryHasNoScriptedModel(t *testing.T) {
 	bin := filepath.Join(t.TempDir(), "prod")
-	out, err := exec.Command("go", "build", "-o", bin, "../cmd/diff-duck").CombinedOutput()
+	out, err := exec.Command("go", "build", "-o", bin, "../cmd/diffduck").CombinedOutput()
 	must(wrap(err, out))
 	cmd := exec.Command(bin, "--adapter", "scripted:normal", "--no-cache", "--out", t.TempDir(), fixture, "base", "head")
 	if err := cmd.Run(); err == nil {

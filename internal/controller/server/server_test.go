@@ -173,11 +173,11 @@ func TestPeopleCanTypePathsTheWayTheyThinkOfThem(t *testing.T) {
 		"":                            "",
 		"--upload-pack=x":             "--upload-pack=x",
 	} {
-		if got := repositoryTarget(in); got != want {
+		if got := ResolveRepository(in); got != want {
 			t.Errorf("%q: got %q, want %q", in, got, want)
 		}
 	}
-	if got := repositoryTarget("relative/repo"); !filepath.IsAbs(got) {
+	if got := ResolveRepository("relative/repo"); !filepath.IsAbs(got) {
 		t.Errorf("relative path stayed relative: %q", got)
 	}
 }

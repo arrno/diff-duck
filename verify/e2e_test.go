@@ -26,7 +26,7 @@ func TestMain(m *testing.M) {
 	must(err)
 	defer os.RemoveAll(work)
 	binary = filepath.Join(work, "diff-duck")
-	out, err := exec.Command("go", "build", "-tags", "verify", "-o", binary, "../cmd/diff-duck").CombinedOutput()
+	out, err := exec.Command("go", "build", "-tags", "verify", "-o", binary, "../cmd/diffduck").CombinedOutput()
 	must(wrap(err, out))
 	fixture = filepath.Join(work, "fixture")
 	out, err = exec.Command("./make-fixture.sh", fixture).CombinedOutput()

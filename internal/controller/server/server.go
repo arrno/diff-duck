@@ -32,6 +32,15 @@ const (
 	contentPolicy  = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 )
 
+// AppName identifies this server in its health response.
+const AppName = "diffduck"
+
+// Health is the response to GET /api/health.
+type Health struct {
+	App string `json:"app"`
+	PID int    `json:"pid"`
+}
+
 // Handler returns the interface for a server reachable at port on the loopback address. page
 // is the application page.
 func Handler(library *services.DiffLibrary, page []byte, port int) http.Handler {
@@ -41,6 +50,10 @@ func Handler(library *services.DiffLibrary, page []byte, port int) http.Handler 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Content-Security-Policy", contentPolicy)
 		_, _ = w.Write(page)
+	})
+	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, _ *http.Request) {
+		// The command line uses the process ID to know it is talking to the server it recorded.
+		writeJSON(w, http.StatusOK, Health{App: AppName, PID: os.Getpid()})
 	})
 	mux.HandleFunc("GET /api/commits", api.commits)
 	mux.HandleFunc("GET /api/diffs", api.listDiffs)
@@ -87,7 +100,7 @@ func (a *api) commits(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), commitsTimeout)
 	defer cancel()
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	commits, err := a.library.Commits(ctx, repositoryTarget(r.URL.Query().Get("repo")), limit)
+	commits, err := a.library.Commits(ctx, ResolveRepository(r.URL.Query().Get("repo")), limit)
 	if err != nil {
 		// A repository that cannot be read is the expected failure here, and the user can fix it.
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -128,7 +141,7 @@ func (a *api) createDiff(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "The request could not be read.")
 		return
 	}
-	diff, err := a.library.StartDiff(r.Context(), repositoryTarget(req.Repository), strings.TrimSpace(req.Base), strings.TrimSpace(req.Head))
+	diff, err := a.library.StartDiff(r.Context(), ResolveRepository(req.Repository), strings.TrimSpace(req.Base), strings.TrimSpace(req.Head))
 	if err != nil {
 		writeFailure(w, err)
 		return
@@ -153,9 +166,9 @@ func (a *api) deleteDiff(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// repositoryTarget turns what a person typed into an absolute path or a clone URL, because the
+// ResolveRepository turns what a person typed into an absolute path or a clone URL, because the
 // server's working directory means nothing to them.
-func repositoryTarget(input string) string {
+func ResolveRepository(input string) string {
 	target := strings.TrimSpace(input)
 	if target == "" || strings.HasPrefix(target, "-") || gitrepo.IsRemote(target) {
 		return target

@@ -6,7 +6,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { viteSingleFile } from "vite-plugin-singlefile";
 
 // Development only: fills the page from a saved compressed-diff.json, as diff-duck does at run
-// time. Without one, the page is the app, talking to `diff-duck serve` through the proxy below.
+// time. Without one, the page is the app, talking to `diffduck serve` through the proxy below.
 function devModel(): Plugin {
   return {
     name: "diff-duck-dev-model",

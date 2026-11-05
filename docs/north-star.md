@@ -1,17 +1,21 @@
-# North Star: diff-duck v1
+# North Star: DiffDuck v1
 
 Product intent and invariants live in [concept.md](concept.md) (I1–I12). This document only
 records what v1 includes, the decisions made for it, and how it is accepted.
 
 ## Goal
 
-`diff-duck <repo-url-or-path> <base> <head>` turns the Git diff between any two commits
+`diffduck <repo-url-or-path> <base> <head>` turns the Git diff between any two commits
 into a compressed diff: structured JSON plus one self-contained HTML viewer.
 
 The CLI doubles as the evaluation harness: it runs against any Git project and any commit pair.
 
-`diff-duck serve` is the same pipeline as a local web app: point it at a repo, pick two commits,
+`diffduck serve` is the same pipeline as a local web app: point it at a repo, pick two commits,
 and open, list, or delete the diffs it keeps.
+
+`diffduck up`, `down`, `status`, and `reset` run that app in the background, and `diffduck diff`
+drives it from a shell, so a person or a coding agent can say "diffduck it" and get a page:
+`diffduck diff [repo] -f <from> -t <to>`, `diff list`, `diff open`, `diff delete`.
 
 ## Decisions
 
@@ -22,8 +26,9 @@ and open, list, or delete the diffs it keeps.
 | Quality goal | Structural facts are deterministic and strictly tested. Summaries are judged for quality, not determinism. |
 | Prompts | Markdown files, one directory per variant, injected with `--prompts`. Every run records the variant and prompt hashes. |
 | Model access | A `LanguageModel` port. Adapters: `claude-cli` (default, cheaper) and `anthropic-api`. Default model: Sonnet. Each run has a call limit. |
-| UI | React and shadcn/ui in `clients/viewer`, built into one HTML page. Standalone, the page holds one diff and needs no server. Under `diff-duck serve`, the same page is the app. This is an agreed exception to `ui-architecture.md`: no Next.js or login, because the app is local to one person. Its component, theming, accessibility, and Playwright rules still apply. |
+| UI | React and shadcn/ui in `clients/viewer`, built into one HTML page. Standalone, the page holds one diff and needs no server. Under `diffduck serve`, the same page is the app. This is an agreed exception to `ui-architecture.md`: no Next.js or login, because the app is local to one person. Its component, theming, accessibility, and Playwright rules still apply. |
 | Local app | Listens only on `127.0.0.1`. Every request must name this server in `Host` and must not come from another site, because the API runs git and spends model calls. Every diff is saved when requested, one runs at a time, and a failed or stopped run stays listed. |
+| App commands | The CLI is a client of the app's own HTTP API, so the browser and the shell share one server, one queue, and one database. The running server records its PID and port in `server.json` in the DiffDuck home (`$DIFFDUCK_HOME`, default `diff-duck` in the user config directory); a command trusts the record only when `/api/health` answers with that PID. `diff` starts the app when none is running. Relative repo paths are resolved by the caller, not the server. |
 | Storage | SQLite through `modernc.org/sqlite`, which needs no cgo, behind the `DiffStore` port. Saved diffs hold source code, so the file is private to the user. |
 | Review | One integrated review before verification, instead of one per step. |
 
@@ -63,6 +68,7 @@ same machine can reach the loopback port, so the app assumes a single-user machi
 | A15 | Diffs are saved automatically and survive a restart; deleting asks first and removes them for good | Goal |
 | A16 | A failed or interrupted run stays listed with its reason and can be retried | Decision above |
 | A17 | Requests from other sites and through other host names are refused | Decision above |
+| A18 | From a shell, `up`, `diff`, `diff list`, `diff delete`, `reset`, and `down` drive the same app as the UI; a stale record is ignored; `reset` never deletes without `--yes` or a typed yes | Decision above |
 
 ## Non-goals
 
