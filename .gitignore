@@ -1,0 +1,8 @@
+bin/
+duck-diff-out/
+node_modules/
+verify/.work/
+verify/test-results/
+verify/playwright-report/
+clients/viewer/node_modules/
+clients/viewer/dist/
