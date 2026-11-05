@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"duck-diff/internal/domain"
-	"duck-diff/internal/services/ports"
+	"github.com/arrno/duck-diff/internal/domain"
+	"github.com/arrno/duck-diff/internal/services/ports"
 )
 
 func TestParseDiffPairsPathsAndLineNumbers(t *testing.T) {

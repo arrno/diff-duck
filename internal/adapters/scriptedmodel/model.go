@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"strings"
 
-	"duck-diff/internal/services/ports"
+	"github.com/arrno/duck-diff/internal/services/ports"
 )
 
 // Behavior selects what the model does.

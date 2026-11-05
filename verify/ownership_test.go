@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"duck-diff/internal/domain"
+	"github.com/arrno/duck-diff/internal/domain"
 )
 
 func changedText(n *domain.Node) string {

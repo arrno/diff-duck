@@ -11,7 +11,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"duck-diff/internal/services/ports"
+	"github.com/arrno/duck-diff/internal/services/ports"
 )
 
 // Model calls the Claude Code CLI.

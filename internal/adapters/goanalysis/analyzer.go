@@ -15,7 +15,7 @@ import (
 	"path"
 	"strings"
 
-	"duck-diff/internal/domain"
+	"github.com/arrno/duck-diff/internal/domain"
 )
 
 const maxSignature = 240

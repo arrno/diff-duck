@@ -11,7 +11,7 @@ import (
 	"github.com/anthropics/anthropic-sdk-go/v2/option"
 	"github.com/anthropics/anthropic-sdk-go/v2/shared/constant"
 
-	"duck-diff/internal/services/ports"
+	"github.com/arrno/duck-diff/internal/services/ports"
 )
 
 const maxTokens = 16000

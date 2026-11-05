@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"duck-diff/internal/services/ports"
+	"github.com/arrno/duck-diff/internal/services/ports"
 )
 
 type stub struct {

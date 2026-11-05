@@ -3,7 +3,7 @@ package goanalysis
 import (
 	"testing"
 
-	"duck-diff/internal/domain"
+	"github.com/arrno/duck-diff/internal/domain"
 )
 
 func unit(t *testing.T, src, name string) domain.Unit {

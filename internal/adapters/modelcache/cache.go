@@ -12,7 +12,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"duck-diff/internal/services/ports"
+	"github.com/arrno/duck-diff/internal/services/ports"
 )
 
 // Model adds a disk cache in front of another LanguageModel.

@@ -14,16 +14,16 @@ import (
 	"strings"
 	"unicode"
 
-	"duck-diff/internal/adapters/anthropicapi"
-	"duck-diff/internal/adapters/claudecli"
-	"duck-diff/internal/adapters/gitrepo"
-	"duck-diff/internal/adapters/goanalysis"
-	"duck-diff/internal/adapters/modelcache"
-	"duck-diff/internal/adapters/promptfiles"
-	"duck-diff/internal/controller/htmlview"
-	"duck-diff/internal/domain"
-	"duck-diff/internal/services"
-	"duck-diff/internal/services/ports"
+	"github.com/arrno/duck-diff/internal/adapters/anthropicapi"
+	"github.com/arrno/duck-diff/internal/adapters/claudecli"
+	"github.com/arrno/duck-diff/internal/adapters/gitrepo"
+	"github.com/arrno/duck-diff/internal/adapters/goanalysis"
+	"github.com/arrno/duck-diff/internal/adapters/modelcache"
+	"github.com/arrno/duck-diff/internal/adapters/promptfiles"
+	"github.com/arrno/duck-diff/internal/controller/htmlview"
+	"github.com/arrno/duck-diff/internal/domain"
+	"github.com/arrno/duck-diff/internal/services"
+	"github.com/arrno/duck-diff/internal/services/ports"
 )
 
 const usage = `duck-diff turns the Git diff between two commits into a compressed diff.

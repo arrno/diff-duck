@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 
-	"duck-diff/internal/domain"
+	"github.com/arrno/duck-diff/internal/domain"
 )
 
 // RepositoryReader reads a repository's history. Implementations must treat revisions and

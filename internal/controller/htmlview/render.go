@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	"duck-diff/internal/domain"
+	"github.com/arrno/duck-diff/internal/domain"
 )
 
 //go:embed viewer.html

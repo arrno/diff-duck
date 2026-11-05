@@ -6,7 +6,7 @@ import (
 	"os"
 	"os/signal"
 
-	"duck-diff/internal/controller/cli"
+	"github.com/arrno/duck-diff/internal/controller/cli"
 )
 
 func main() {

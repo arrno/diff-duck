@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"duck-diff/internal/domain"
-	"duck-diff/internal/services/ports"
+	"github.com/arrno/duck-diff/internal/domain"
+	"github.com/arrno/duck-diff/internal/services/ports"
 )
 
 // ErrNoExplanations means every model call failed. The structural diff is still returned, so
