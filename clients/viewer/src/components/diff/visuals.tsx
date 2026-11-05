@@ -37,14 +37,21 @@ export function OpBadge({ op, className }: { op: ChangeOp; className?: string })
   );
 }
 
+/** A round tinted icon. The surrounding text sets its color. */
+export function IconMark({ icon: Icon, soft }: { icon: LucideIcon; soft: string }) {
+  return (
+    <span className={cn("flex size-7 shrink-0 items-center justify-center rounded-full", soft)}>
+      <Icon aria-hidden className="size-4" strokeWidth={2.5} />
+    </span>
+  );
+}
+
 /** A large operation marker for headline cards. */
 export function OpMark({ op }: { op: ChangeOp }) {
   const { icon: Icon, label, text, soft } = OPS[op];
   return (
     <span className={cn("inline-flex items-center gap-2 text-xs font-semibold tracking-wide", text)}>
-      <span className={cn("flex size-7 items-center justify-center rounded-full", soft)}>
-        <Icon aria-hidden className="size-4" strokeWidth={2.5} />
-      </span>
+      <IconMark icon={Icon} soft={soft} />
       {label}
     </span>
   );

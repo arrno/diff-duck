@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { AlertTriangle, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
-import { Outcomes } from "@/components/diff/Outcomes";
+import { Outcomes, ScopeFilters } from "@/components/diff/Outcomes";
 import { UnitList } from "@/components/diff/Unit";
 import { ViewContext, type ViewState } from "@/components/diff/ViewState";
 import type { CompressedDiff } from "@/lib/model";
@@ -63,7 +63,6 @@ export function App({ model }: { model: CompressedDiff }) {
     filter.kind === "all" ? "Showing all changes."
     : filter.kind === "unassigned" ? `Showing ${unassigned.size} changes with no outcome.`
     : `Showing ${countMatches(model.nodes, filter, unassigned)} changes for: ${model.outcomes.find((o) => o.id === filter.id)?.title}.`;
-  const chip = "rounded-full border px-3 py-1 text-sm font-medium hover:bg-accent aria-pressed:border-primary aria-pressed:bg-primary aria-pressed:text-primary-foreground";
 
   return (
     <ViewContext.Provider value={view}>
@@ -109,6 +108,11 @@ export function App({ model }: { model: CompressedDiff }) {
             className="space-y-3 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto lg:p-1"
           >
             <h2 id="outcomes-heading" className="text-lg font-medium">Outcomes</h2>
+            <ScopeFilters
+              scope={filter.kind === "outcome" ? null : filter.kind}
+              unassignedCount={unassigned.size}
+              onSelect={(kind) => applyFilter({ kind })}
+            />
             <Outcomes
               outcomes={model.outcomes}
               roots={model.nodes}
@@ -122,14 +126,8 @@ export function App({ model }: { model: CompressedDiff }) {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 id="changes-heading" className="text-lg font-medium">What changed</h2>
               <div className="flex flex-wrap gap-2">
-                <button type="button" className={chip} data-filter="all" aria-pressed={filter.kind === "all"} onClick={() => applyFilter({ kind: "all" })}>
-                  All changes
-                </button>
-                <button type="button" className={chip} data-filter="unassigned" aria-pressed={filter.kind === "unassigned"} onClick={() => applyFilter({ kind: "unassigned" })}>
-                  No outcome ({unassigned.size})
-                </button>
-                <Button type="button" variant="outline" size="sm" onClick={() => setExpanded(allParents(model.nodes))}>Expand all</Button>
-                <Button type="button" variant="outline" size="sm" onClick={() => setExpanded(new Set())}>Collapse all</Button>
+                <Button type="button" size="sm" onClick={() => setExpanded(allParents(model.nodes))}>Expand all</Button>
+                <Button type="button" size="sm" onClick={() => setExpanded(new Set())}>Collapse all</Button>
               </div>
             </div>
             <p role="status" data-testid="filter-status" className="text-xs text-muted-foreground">{status}</p>
