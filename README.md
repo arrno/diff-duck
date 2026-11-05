@@ -48,28 +48,37 @@ go install github.com/arrno/diff-duck/cmd/diffduck@latest
 
 Or from a clone: `make build`, which writes `bin/diffduck`.
 
-Summaries come from Claude through the `claude` CLI by default (`--adapter anthropic-api` uses
-`ANTHROPIC_API_KEY` instead).
-
 ## Use
 
+From inside a Git repo:
+
 ```sh
-diffduck up                                # start the app in the background
-diffduck diff                              # diff HEAD~1..HEAD of this repo and open it
-diffduck diff ~/code/api -f main -t feature --wait
-diffduck diff list
-diffduck diff open <id>
-diffduck diff delete <id>
-diffduck reset                             # delete every saved diff
-diffduck down
+diffduck diff
 ```
 
-**Your diffs are at http://127.0.0.1:7474/.** `diffduck up` and `diffduck status` print that
-address, and `diffduck diff` prints a direct link to the diff it builds. In the app you can also
-pick commits by hand. Use `diffduck up --port <n>` for another port.
+That diffs `HEAD~1..HEAD`, starts the app in the background if it isn't running, and opens the
+result in your browser. **Your diffs live at http://127.0.0.1:7474/**, where you can also pick
+commits by hand.
 
-`diffduck diff` starts the app if it is not running. Run `diffduck -h` for everything, including
-the one-shot form that writes a standalone HTML file without the app.
+| Command | What it does |
+| --- | --- |
+| `diffduck diff [repo] [-f from] [-t to]` | Build a diff and open it. Defaults: `.`, `HEAD~1`, `HEAD`. Add `--wait` to wait for it to finish and print the overview, or `--no-open` to skip the browser. |
+| `diffduck diff list [--json]` | List saved diffs and their IDs. |
+| `diffduck diff open [id]` | Open the app, or one diff, in the browser. |
+| `diffduck diff delete <id>...` | Delete saved diffs. |
+| `diffduck up` | Start the app in the background and print its address. Optional, since every `diff` command starts it. |
+| `diffduck status` | Say whether the app is running, and where. |
+| `diffduck down` | Stop the app. |
+| `diffduck reset` | Delete every saved diff. Asks first, or pass `--yes`. |
+| `diffduck serve` | Run the app in this terminal instead of the background. |
+
+Settings are flags on `up` (or `serve`) and apply until the next `down`. For example,
+`diffduck up --port 8080` or `diffduck up --adapter anthropic-api`. By default, summaries come from
+Claude through the `claude` CLI. The `anthropic-api` adapter uses `ANTHROPIC_API_KEY` instead. A
+`diff` that has to start the app uses the defaults.
+
+Run `diffduck -h` for every flag, including a one-shot form that writes a standalone HTML file
+without the app.
 
 ## From a coding agent
 
