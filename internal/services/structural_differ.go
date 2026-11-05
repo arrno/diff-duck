@@ -755,7 +755,7 @@ func (b *treeBuilder) regionNode(f *analyzedFile) *domain.Node {
 		}},
 		Summary: domain.Summary{
 			Origin: domain.OriginStructural,
-			Text:   "Lines outside any changed code unit, such as the package clause, imports, comments, or formatting.",
+			Text:   "Imports, comments, formatting, or similar.",
 		},
 	}
 	b.nodes[id] = n

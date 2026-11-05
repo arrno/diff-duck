@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,10 @@ function DuckIcon() {
 export function App({ model }: { model: CompressedDiff }) {
   const packages = useMemo(() => model.nodes.filter((n) => n.kind === "PACKAGE").sort(bySize), [model]);
   const otherFiles = useMemo(() => model.nodes.filter((n) => n.kind !== "PACKAGE"), [model]);
+  useEffect(() => {
+    const repository = model.repository.replace(/\/+$/, "").split("/").pop()?.replace(/\.git$/, "");
+    document.title = `${repository}: ${model.base} → ${model.head} · DuckDiff`;
+  }, [model]);
   const [filter, setFilter] = useState<Filter>({ kind: "all" });
   // Packages start open: opening a card only to reach more cards is a wasted click.
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(packages.map((n) => n.id)));

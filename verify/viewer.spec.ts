@@ -34,6 +34,8 @@ test("the opening view shows the first level of what changed", async ({ page }) 
   await expect(page.getByTestId("stats")).toContainText("13 files");
   await expect(page.getByTestId("stats")).toContainText("traced 63/63 changed lines");
   await expect(page.getByRole("button", { name: /All changes/ })).toHaveAttribute("aria-pressed", "true");
+  await expect(page).toHaveTitle(/ · DuckDiff$/);
+  await expect(page.locator('link[rel="icon"]')).toHaveCount(2);
   // A file tree: no level of it is a box.
   await expect(page.getByTestId("tree").locator('[data-slot="card"]')).toHaveCount(0);
   const boxed = await page.locator("li[data-node-id]").evaluateAll((rows) =>
