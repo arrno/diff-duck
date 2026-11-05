@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/arrno/duck-diff/internal/adapters/scriptedmodel"
-	"github.com/arrno/duck-diff/internal/services/ports"
+	"github.com/arrno/diff-duck/internal/adapters/scriptedmodel"
+	"github.com/arrno/diff-duck/internal/services/ports"
 )
 
 // verificationModel provides the scripted model to verification builds.

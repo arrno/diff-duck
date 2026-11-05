@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/arrno/duck-diff/internal/domain"
+	"github.com/arrno/diff-duck/internal/domain"
 )
 
 const maxOutcomeInputChars = 1500000

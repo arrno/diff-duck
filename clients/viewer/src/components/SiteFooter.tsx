@@ -6,7 +6,7 @@ export function SiteFooter() {
     <footer data-testid="site-footer" className="border-t">
       <div className="mx-auto flex max-w-screen-2xl flex-col gap-4 px-4 py-6 text-sm text-muted-foreground md:flex-row md:items-center md:justify-between md:px-8">
         <div className="space-y-1">
-          <p className="font-semibold text-foreground">DuckDiff</p>
+          <p className="font-semibold text-foreground">DiffDuck</p>
           <p>Compressed, explorable Git diffs. Version 0.0.0.</p>
         </div>
         <nav aria-label="Footer">

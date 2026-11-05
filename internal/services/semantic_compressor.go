@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/arrno/duck-diff/internal/domain"
+	"github.com/arrno/diff-duck/internal/domain"
 )
 
 const (

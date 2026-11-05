@@ -9,8 +9,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/arrno/duck-diff/internal/domain"
-	"github.com/arrno/duck-diff/internal/services/ports"
+	"github.com/arrno/diff-duck/internal/domain"
+	"github.com/arrno/diff-duck/internal/services/ports"
 )
 
 // answerFunc scripts a model from each request's decoded input.

@@ -1,12 +1,12 @@
 ## 1. Product Vision
 
-DuckDiff is a semantic diff compression and exploration system designed for an era of agentic software development.
+DiffDuck is a semantic diff compression and exploration system designed for an era of agentic software development.
 
 As coding agents generate increasingly large volumes of code, traditional line-by-line diff review becomes a bottleneck. Humans cannot reasonably inspect every implementation detail of every change.
 
-DuckDiff changes the unit of understanding from **lines of code to semantic code units and behavioral outcomes**.
+DiffDuck changes the unit of understanding from **lines of code to semantic code units and behavioral outcomes**.
 
-Instead of asking a developer to read hundreds of lines to discover what changed, DuckDiff presents a compact, hierarchical account of the change, with progressively deeper detail available on demand.
+Instead of asking a developer to read hundreds of lines to discover what changed, DiffDuck presents a compact, hierarchical account of the change, with progressively deeper detail available on demand.
 
 **North Star:** A developer should be able to understand the scope, structure, intent, and consequences of a large code change in seconds rather than minutes or hours.
 
@@ -14,7 +14,7 @@ Instead of asking a developer to read hundreds of lines to discover what changed
 
 ### 2.1 Trust the implementation
 
-DuckDiff assumes that implementation correctness is primarily the responsibility of the coding agent, tests, and other verification systems.
+DiffDuck assumes that implementation correctness is primarily the responsibility of the coding agent, tests, and other verification systems.
 
 Its primary purpose is not to establish whether code is correct. Its purpose is to communicate what the code does and what changed.
 
@@ -24,7 +24,7 @@ The product must not force the user to examine implementation details to underst
 
 Compression is not achieved by removing lines, collapsing unchanged regions, or generating a prose summary of a patch.
 
-Instead, DuckDiff translates source changes into a higher-level semantic representation.
+Instead, DiffDuck translates source changes into a higher-level semantic representation.
 
 For example, the implementation:
 
@@ -79,7 +79,7 @@ A concise explanation may omit implementation detail, but it must not misreprese
 
 ## 3. Core Product Model
 
-DuckDiff represents a Git diff along two complementary dimensions.
+DiffDuck represents a Git diff along two complementary dimensions.
 
 ### 3.1 WHAT — Behavioral outcomes
 
@@ -131,7 +131,7 @@ Changes that cannot confidently be associated with an outcome must remain visibl
 
 ## 4. The Compressed Diff
 
-The compressed diff is the central artifact of DuckDiff.
+The compressed diff is the central artifact of DiffDuck.
 
 It is not a textual patch with annotations. It is a new semantic representation derived from a patch.
 
@@ -198,7 +198,7 @@ This representation communicates what changed without exposing implementation lo
 
 Source code names may be abbreviated, ambiguous, or misleading.
 
-DuckDiff may generate clearer semantic names while preserving actual source identities.
+DiffDuck may generate clearer semantic names while preserving actual source identities.
 
 For example:
 
@@ -239,7 +239,7 @@ Implementation details may be revealed through deeper inspection, but they must 
 
 A parent node may appear because it changed directly or because one of its descendants changed.
 
-DuckDiff must distinguish these cases internally.
+DiffDuck must distinguish these cases internally.
 
 A service whose only change is the addition of a method should not be represented as though its own interface or behavior was independently modified, except insofar as the new method changes the service's capabilities.
 
@@ -320,7 +320,7 @@ This is recursive semantic compression.
 
 ### 5.4 Change classification
 
-DuckDiff should distinguish a code unit's existence from changes to its behavior.
+DiffDuck should distinguish a code unit's existence from changes to its behavior.
 
 For an existing method, a summary should describe what changed, not simply what the method does.
 
@@ -332,7 +332,7 @@ For a removed method, the summary should explain what capability or behavior was
 
 Code units may be renamed, moved, extracted, or reorganized.
 
-DuckDiff should attempt to recognize continuity between the before and after revisions.
+DiffDuck should attempt to recognize continuity between the before and after revisions.
 
 A renamed method should not automatically appear as an unrelated deletion and addition.
 
@@ -462,7 +462,7 @@ Outcomes provide a useful semantic lens, but the structural diff remains the com
 
 ### Decision 2: The product is diff-scoped
 
-DuckDiff does not attempt to document the entire codebase.
+DiffDuck does not attempt to document the entire codebase.
 
 It represents only the changes between revisions and the context required to understand them.
 
@@ -494,7 +494,7 @@ The success criterion is not how accurately the product reproduces source code. 
 
 ## 9. Non-Goals
 
-DuckDiff is not intended to be:
+DiffDuck is not intended to be:
 
 - A replacement for automated tests.
 - A static analyzer or correctness verifier.
@@ -504,13 +504,13 @@ DuckDiff is not intended to be:
 - A textual diff beautifier.
 - An automatic code refactoring tool.
 
-These systems may complement DuckDiff, but they do not define its purpose.
+These systems may complement DiffDuck, but they do not define its purpose.
 
 ## 10. Success Criteria
 
 The primary measure of success is **time to accurate understanding**.
 
-A successful DuckDiff experience allows a developer to:
+A successful DiffDuck experience allows a developer to:
 
 1. Identify the meaningful outcomes of a large change.
 2. Understand which code units were affected.
@@ -585,13 +585,13 @@ These are implementation and product-design questions to resolve experimentally.
 
 ## 13. North Star Summary
 
-DuckDiff exists to solve a fundamental mismatch between agentic code production and human code comprehension.
+DiffDuck exists to solve a fundamental mismatch between agentic code production and human code comprehension.
 
 Coding agents produce implementations. Humans need to understand changes.
 
 Traditional diffs expose implementation first and meaning second.
 
-**DuckDiff reverses that relationship.**
+**DiffDuck reverses that relationship.**
 
 It converts a Git diff into a compact, hierarchical semantic model that communicates:
 

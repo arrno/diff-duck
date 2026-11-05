@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/arrno/duck-diff/internal/services/ports"
+	"github.com/arrno/diff-duck/internal/services/ports"
 )
 
 func fakeClaude(t *testing.T, body string) (*Model, string) {

@@ -3,13 +3,14 @@ package gitrepo
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
 	"testing"
 
-	"github.com/arrno/duck-diff/internal/domain"
-	"github.com/arrno/duck-diff/internal/services/ports"
+	"github.com/arrno/diff-duck/internal/domain"
+	"github.com/arrno/diff-duck/internal/services/ports"
 )
 
 func TestParseDiffPairsPathsAndLineNumbers(t *testing.T) {
@@ -147,5 +148,51 @@ func TestOutputLimitStopsAnOversizedRead(t *testing.T) {
 	}
 	if _, err := b.Write([]byte("5")); !errors.Is(err, errOutputTooLarge) {
 		t.Fatalf("got %v", err)
+	}
+}
+
+func TestListCommitsIsNewestFirstAndKeepsOddSubjects(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	run := func(env []string, args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", dir, "-c", "user.name=Ada Lovelace", "-c", "user.email=a@example.com"}, args...)...)
+		cmd.Env = append(os.Environ(), env...)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, out)
+		}
+	}
+	run(nil, "init", "-q", "-b", "main")
+	for i, subject := range []string{"first", "fix: a|b %s <tag> \"quotes\"", "third"} {
+		date := fmt.Sprintf("GIT_COMMITTER_DATE=2026-01-0%dT00:00:00Z", i+1)
+		run([]string{date, "GIT_AUTHOR_DATE=" + date[len("GIT_COMMITTER_DATE="):]}, "commit", "-q", "--allow-empty", "-m", subject, "-m", "A body line")
+	}
+	r, err := Open(ctx, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	commits, err := r.ListCommits(ctx, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(commits) != 2 {
+		t.Fatalf("limit not applied: %+v", commits)
+	}
+	if commits[0].Subject != "third" || commits[1].Subject != `fix: a|b %s <tag> "quotes"` {
+		t.Errorf("subjects: %+v", commits)
+	}
+	if len(commits[0].SHA) != 40 || strings.ContainsAny(commits[1].SHA, "\n\x00") || commits[0].Author != "Ada Lovelace" {
+		t.Errorf("fields: %+v", commits)
+	}
+	if commits[0].Date.Year() != 2026 || commits[0].Date.Day() != 3 {
+		t.Errorf("date: %v", commits[0].Date)
+	}
+	all, err := r.ListCommits(ctx, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 3 {
+		t.Errorf("got %d commits, want 3", len(all))
 	}
 }

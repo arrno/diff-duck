@@ -1,7 +1,7 @@
 {
-  "name": "duck-diff-dev-tools",
+  "name": "diff-duck-dev-tools",
   "private": true,
-  "description": "Build and verification tools only. The duck-diff binary and its output need no Node.",
+  "description": "Build and verification tools only. The diff-duck binary and its output need no Node.",
   "devDependencies": {
     "@axe-core/playwright": "4.10.2",
     "@playwright/test": "1.55.0"

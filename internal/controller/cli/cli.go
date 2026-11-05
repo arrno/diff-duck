@@ -14,24 +14,26 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/arrno/duck-diff/internal/adapters/anthropicapi"
-	"github.com/arrno/duck-diff/internal/adapters/claudecli"
-	"github.com/arrno/duck-diff/internal/adapters/gitrepo"
-	"github.com/arrno/duck-diff/internal/adapters/goanalysis"
-	"github.com/arrno/duck-diff/internal/adapters/modelcache"
-	"github.com/arrno/duck-diff/internal/adapters/promptfiles"
-	"github.com/arrno/duck-diff/internal/controller/htmlview"
-	"github.com/arrno/duck-diff/internal/domain"
-	"github.com/arrno/duck-diff/internal/services"
-	"github.com/arrno/duck-diff/internal/services/ports"
+	"github.com/arrno/diff-duck/internal/adapters/anthropicapi"
+	"github.com/arrno/diff-duck/internal/adapters/claudecli"
+	"github.com/arrno/diff-duck/internal/adapters/gitrepo"
+	"github.com/arrno/diff-duck/internal/adapters/goanalysis"
+	"github.com/arrno/diff-duck/internal/adapters/modelcache"
+	"github.com/arrno/diff-duck/internal/adapters/promptfiles"
+	"github.com/arrno/diff-duck/internal/controller/htmlview"
+	"github.com/arrno/diff-duck/internal/domain"
+	"github.com/arrno/diff-duck/internal/services"
+	"github.com/arrno/diff-duck/internal/services/ports"
 )
 
-const usage = `duck-diff turns the Git diff between two commits into a compressed diff.
+const usage = `diff-duck turns the Git diff between two commits into a compressed diff.
 
 Usage:
-  duck-diff [flags] <repo-url-or-path> <base> <head>
+  diff-duck [flags] <repo-url-or-path> <base> <head>
+  diff-duck serve [flags]
 
-Writes compressed-diff.json and index.html to the output directory.
+The first form writes compressed-diff.json and index.html to the output directory. The second
+opens the local web app. To analyze a directory named serve, write it as ./serve.
 
 Flags:
 `
@@ -59,19 +61,15 @@ type options struct {
 
 // Run executes the command and returns its exit code.
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 && args[0] == "serve" {
+		return runServe(ctx, args[1:], stdout, stderr)
+	}
 	opts := options{}
-	fs := flag.NewFlagSet("duck-diff", flag.ContinueOnError)
+	fs := flag.NewFlagSet("diff-duck", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	fs.StringVar(&opts.out, "out", "", "output directory (default: ./duck-diff-out/<base>..<head>)")
-	fs.StringVar(&opts.adapter, "adapter", "claude-cli", "model adapter: claude-cli or anthropic-api")
-	fs.StringVar(&opts.model, "model", "claude-sonnet-5-5", "model ID")
-	fs.StringVar(&opts.effort, "effort", "medium", "model effort: low, medium, high, xhigh, or max")
-	fs.StringVar(&opts.promptsDir, "prompts", "", "prompt variant directory holding leaf.md, parent.md, outcomes.md (default: built in)")
-	fs.IntVar(&opts.concurrency, "concurrency", 4, "maximum concurrent model calls")
-	fs.BoolVar(&opts.noCache, "no-cache", false, "ignore and do not write the model response cache")
-	fs.StringVar(&opts.cacheDir, "cache-dir", "", "model response cache directory (default: the user cache directory)")
+	fs.StringVar(&opts.out, "out", "", "output directory (default: ./diff-duck-out/<base>..<head>)")
 	fs.BoolVar(&opts.structureOnly, "structure-only", false, "skip the model and output only structural facts")
-	fs.IntVar(&opts.maxModelCalls, "max-model-calls", 200, "most model calls in one run, leaving the rest visibly unexplained; 0 means no limit")
+	addModelFlags(fs, &opts)
 	fs.Usage = func() {
 		fmt.Fprint(stderr, usage)
 		fs.PrintDefaults()
@@ -113,6 +111,18 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	return exitOK
 }
 
+// addModelFlags registers the settings shared by every way of generating a diff.
+func addModelFlags(fs *flag.FlagSet, opts *options) {
+	fs.StringVar(&opts.adapter, "adapter", "claude-cli", "model adapter: claude-cli or anthropic-api")
+	fs.StringVar(&opts.model, "model", "claude-sonnet-5-5", "model ID")
+	fs.StringVar(&opts.effort, "effort", "medium", "model effort: low, medium, high, xhigh, or max")
+	fs.StringVar(&opts.promptsDir, "prompts", "", "prompt variant directory holding leaf.md, parent.md, outcomes.md (default: built in)")
+	fs.IntVar(&opts.concurrency, "concurrency", 4, "maximum concurrent model calls")
+	fs.BoolVar(&opts.noCache, "no-cache", false, "ignore and do not write the model response cache")
+	fs.StringVar(&opts.cacheDir, "cache-dir", "", "model response cache directory (default: the user cache directory)")
+	fs.IntVar(&opts.maxModelCalls, "max-model-calls", 200, "most model calls in one run, leaving the rest visibly unexplained; 0 means no limit")
+}
+
 func execute(ctx context.Context, opts options, target, base, head string, stdout io.Writer) error {
 	repo, err := gitrepo.Open(ctx, target)
 	if err != nil {
@@ -149,7 +159,7 @@ func execute(ctx context.Context, opts options, target, base, head string, stdou
 
 	dir := opts.out
 	if dir == "" {
-		dir = filepath.Join("duck-diff-out", shortSHA(result.BaseSHA)+".."+shortSHA(result.HeadSHA))
+		dir = filepath.Join("diff-duck-out", shortSHA(result.BaseSHA)+".."+shortSHA(result.HeadSHA))
 		// This path is predictable and may sit inside the analyzed checkout, so a hostile
 		// repository could commit a symlink here.
 		if err := refuseSymlinks(dir); err != nil {
@@ -191,7 +201,7 @@ func buildModel(opts options) (ports.LanguageModel, func(), error) {
 		if err != nil {
 			return nil, nil, fmt.Errorf("locate cache directory (use --cache-dir or --no-cache): %w", err)
 		}
-		dir = filepath.Join(base, "duck-diff", "responses")
+		dir = filepath.Join(base, "diff-duck", "responses")
 	}
 	cached, err := modelcache.New(model, dir)
 	if err != nil {
@@ -242,7 +252,7 @@ func write(dir string, result *domain.CompressedDiff) error {
 // replaceFile writes through a temporary file and a rename, which replaces a symlink at the
 // path rather than following it to overwrite its target.
 func replaceFile(path string, data []byte) error {
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".duck-diff-*")
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".diff-duck-*")
 	if err != nil {
 		return err
 	}

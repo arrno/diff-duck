@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/arrno/duck-diff/internal/domain"
-	"github.com/arrno/duck-diff/internal/services/ports"
+	"github.com/arrno/diff-duck/internal/domain"
+	"github.com/arrno/diff-duck/internal/services/ports"
 )
 
 const modelAttempts = 2

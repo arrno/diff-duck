@@ -5,8 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"time"
 
-	"github.com/arrno/duck-diff/internal/domain"
+	"github.com/arrno/diff-duck/internal/domain"
 )
 
 // RepositoryReader reads a repository's history. Implementations must treat revisions and
@@ -24,6 +25,37 @@ type RepositoryReader interface {
 
 // ErrUnknownRevision means a revision does not resolve to a commit.
 var ErrUnknownRevision = errors.New("unknown revision")
+
+// OpenRepository is a repository in use. Close releases anything held for it.
+type OpenRepository interface {
+	RepositoryReader
+	// ListCommits returns the most recent commits reachable from HEAD, newest first.
+	ListCommits(ctx context.Context, limit int) ([]domain.Commit, error)
+	Close()
+}
+
+// RepositorySource opens a repository from a local path or a clone URL.
+type RepositorySource interface {
+	Open(ctx context.Context, target string) (OpenRepository, error)
+}
+
+// DiffStore keeps saved diffs across restarts.
+type DiffStore interface {
+	Create(ctx context.Context, diff *domain.SavedDiff) error
+	// Update replaces a saved diff. Updating one that was deleted does nothing.
+	Update(ctx context.Context, diff *domain.SavedDiff) error
+	// Get returns a saved diff with its result, or ErrDiffNotFound.
+	Get(ctx context.Context, id string) (*domain.SavedDiff, error)
+	// List returns saved diffs without their results, newest first.
+	List(ctx context.Context) ([]domain.SavedDiff, error)
+	// Delete removes a saved diff, or returns ErrDiffNotFound.
+	Delete(ctx context.Context, id string) error
+	// FailRunning marks every running diff as failed with this message.
+	FailRunning(ctx context.Context, message string, at time.Time) error
+}
+
+// ErrDiffNotFound means no saved diff has that ID.
+var ErrDiffNotFound = errors.New("diff not found")
 
 // SourceAnalyzer extracts code units from one language's source files.
 type SourceAnalyzer interface {

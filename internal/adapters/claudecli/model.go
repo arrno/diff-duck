@@ -11,7 +11,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/arrno/duck-diff/internal/services/ports"
+	"github.com/arrno/diff-duck/internal/services/ports"
 )
 
 // Model calls the Claude Code CLI.
@@ -30,7 +30,7 @@ func New(binary, model, effort string) (*Model, error) {
 	if _, err := exec.LookPath(binary); err != nil {
 		return nil, fmt.Errorf("the claude-cli adapter needs %q on PATH: %w", binary, err)
 	}
-	dir, err := os.MkdirTemp("", "duck-diff-claude-")
+	dir, err := os.MkdirTemp("", "diff-duck-claude-")
 	if err != nil {
 		return nil, err
 	}

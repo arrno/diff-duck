@@ -7,11 +7,12 @@ cd "$(dirname "$0")/.."
 go test -count=1 ./...
 
 export VERIFY_WORK; VERIFY_WORK="$(mktemp -d)"
-trap 'rm -rf "$VERIFY_WORK"' EXIT
+server=""
+trap '[ -n "$server" ] && kill "$server" 2>/dev/null; rm -rf "$VERIFY_WORK"' EXIT
 fixture="$VERIFY_WORK/fixture"
 verify/make-fixture.sh "$fixture"
-go build -tags verify -o "$VERIFY_WORK/duck-diff" ./cmd/duck-diff
-bin="$VERIFY_WORK/duck-diff"
+go build -tags verify -o "$VERIFY_WORK/diff-duck" ./cmd/diff-duck
+bin="$VERIFY_WORK/diff-duck"
 "$bin" --adapter scripted:normal --no-cache --out "$VERIFY_WORK/normal" "$fixture" base head >/dev/null
 "$bin" --structure-only --out "$VERIFY_WORK/empty" "$fixture" base base >/dev/null
 set +e
@@ -19,6 +20,18 @@ set +e
 code=$?
 set -e
 [ "$code" -eq 3 ] || { echo "expected exit 3 from a total model failure, got $code"; exit 1; }
+
+# The local app, on a free port, with its own database.
+"$bin" serve --adapter scripted:normal --no-cache --no-open --port 0 --db "$VERIFY_WORK/app/diffs.db" >"$VERIFY_WORK/server.log" 2>&1 &
+server=$!
+for _ in $(seq 1 100); do
+  APP_URL="$(grep -o 'http://127.0.0.1:[0-9]*/' "$VERIFY_WORK/server.log" || true)"
+  [ -n "$APP_URL" ] && break
+  kill -0 "$server" || { cat "$VERIFY_WORK/server.log"; exit 1; }
+  perl -e 'select(undef, undef, undef, 0.1)'
+done
+[ -n "$APP_URL" ] || { echo "the app did not start"; exit 1; }
+export APP_URL APP_FIXTURE="$fixture"
 
 npx playwright install chromium >/dev/null
 npx playwright test --config verify/playwright.config.ts

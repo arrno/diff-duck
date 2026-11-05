@@ -12,7 +12,7 @@ import (
 
 	"github.com/anthropics/anthropic-sdk-go/v2/option"
 
-	"github.com/arrno/duck-diff/internal/services/ports"
+	"github.com/arrno/diff-duck/internal/services/ports"
 )
 
 func server(t *testing.T, status int, reply string, seen *map[string]any, beta *string) *Model {

@@ -1,4 +1,4 @@
-// The compressed diff as duck-diff publishes it. The viewer only presents this model.
+// The compressed diff as diff-duck publishes it. The viewer only presents this model.
 
 export type ChangeOp = "ADD" | "REMOVE" | "CHANGE";
 export type UnitKind =
@@ -83,7 +83,8 @@ export interface CompressedDiff {
   warnings?: string[];
 }
 
-export function loadModel(): CompressedDiff {
+/** The diff embedded in a standalone page, or null when this page is the interactive app. */
+export function loadModel(): CompressedDiff | null {
   const element = document.getElementById("model");
-  return JSON.parse(element?.textContent ?? "") as CompressedDiff;
+  return JSON.parse(element?.textContent ?? "") as CompressedDiff | null;
 }

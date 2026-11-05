@@ -10,9 +10,10 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 
-	"github.com/arrno/duck-diff/internal/domain"
-	"github.com/arrno/duck-diff/internal/services/ports"
+	"github.com/arrno/diff-duck/internal/domain"
+	"github.com/arrno/diff-duck/internal/services/ports"
 )
 
 // Repository is an opened Git repository.
@@ -80,7 +81,7 @@ func clone(ctx context.Context, target string) (*Repository, error) {
 	if strings.HasPrefix(url, "github.com/") {
 		url = "https://" + url
 	}
-	dir, err := os.MkdirTemp("", "duck-diff-clone-")
+	dir, err := os.MkdirTemp("", "diff-duck-clone-")
 	if err != nil {
 		return nil, err
 	}
@@ -96,6 +97,39 @@ func clone(ctx context.Context, target string) (*Repository, error) {
 		return nil, fmt.Errorf("clone %s: %w: %s", target, err, strings.TrimSpace(stderr.String()))
 	}
 	return &Repository{dir: dir, cleanup: cleanup, cloned: true}, nil
+}
+
+// Source opens repositories for ports.RepositorySource.
+type Source struct{}
+
+// Open opens a local repository or clones a remote one.
+func (Source) Open(ctx context.Context, target string) (ports.OpenRepository, error) {
+	return Open(ctx, target)
+}
+
+// ListCommits returns the most recent commits reachable from HEAD, newest first.
+func (r *Repository) ListCommits(ctx context.Context, limit int) ([]domain.Commit, error) {
+	const fields = 4
+	out, err := r.git(ctx, maxBlobBytes, "log", "--no-show-signature", "--no-color", "--no-mailmap", "--max-count="+strconv.Itoa(limit),
+		"--format=tformat:%H%x00%an%x00%aI%x00%s%x00", "HEAD", "--")
+	if err != nil {
+		return nil, fmt.Errorf("list commits: %w", err)
+	}
+	parts := strings.Split(string(out), "\x00")
+	commits := make([]domain.Commit, 0, len(parts)/fields)
+	for i := 0; i+fields <= len(parts); i += fields {
+		date, err := time.Parse(time.RFC3339, parts[i+2])
+		if err != nil {
+			return nil, fmt.Errorf("list commits: read date: %w", err)
+		}
+		commits = append(commits, domain.Commit{
+			SHA:     strings.TrimLeft(parts[i], "\n"),
+			Author:  parts[i+1],
+			Date:    date,
+			Subject: parts[i+3],
+		})
+	}
+	return commits, nil
 }
 
 // Close releases any temporary clone.

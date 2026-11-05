@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Moon, Sun } from "lucide-react";
-import { useTheme } from "next-themes";
+import type { ReactNode } from "react";
+import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SiteFooter } from "@/components/SiteFooter";
+import { Navbar } from "@/components/Navbar";
 import { Outcomes, ScopeFilters } from "@/components/diff/Outcomes";
 import { UnitList } from "@/components/diff/Unit";
 import { ViewContext, type ViewState } from "@/components/diff/ViewState";
@@ -17,34 +18,13 @@ function toggled(set: Set<string>, id: string): Set<string> {
   return next;
 }
 
-function ThemeToggle() {
-  const { resolvedTheme, setTheme } = useTheme();
-  const dark = resolvedTheme === "dark";
-  return (
-    <Button type="button" variant="outline" size="icon" aria-label="Toggle theme" onClick={() => setTheme(dark ? "light" : "dark")}>
-      {dark ? <Sun aria-hidden /> : <Moon aria-hidden />}
-    </Button>
-  );
-}
-
-function DuckIcon() {
-  return (
-    <svg aria-hidden viewBox="0 0 32 32" className="size-7">
-      <path fill="#FBBF24" d="M3 13c1.5 3 4.5 4.2 8.5 4L20 17c3.5 0 6.5 2.2 6.5 5.2 0 3.6-4 6-9.5 6-7.5 0-13.5-4.2-14-15.2z" />
-      <circle cx="20" cy="11" r="6.5" fill="#FBBF24" />
-      <path fill="#F97316" d="M26 8.8 31.5 11 26 13.8z" />
-      <circle cx="21.8" cy="9.5" r="1.2" fill="#1C1917" />
-      <path fill="none" stroke="#D97706" strokeLinecap="round" strokeWidth="1.8" d="M9.5 20.5c3 3 7.5 3 10.5-.3" />
-    </svg>
-  );
-}
-
-export function App({ model }: { model: CompressedDiff }) {
+/** One compressed diff. `home` and `actions` connect it to the app when it is not a standalone page. */
+export function App({ model, home, actions }: { model: CompressedDiff; home?: string; actions?: ReactNode }) {
   const packages = useMemo(() => model.nodes.filter((n) => n.kind === "PACKAGE").sort(bySize), [model]);
   const otherFiles = useMemo(() => model.nodes.filter((n) => n.kind !== "PACKAGE"), [model]);
   useEffect(() => {
     const repository = model.repository.replace(/\/+$/, "").split("/").pop()?.replace(/\.git$/, "");
-    document.title = `${repository}: ${model.base} → ${model.head} · DuckDiff`;
+    document.title = `${repository}: ${model.base} → ${model.head} · DiffDuck`;
   }, [model]);
   const [filter, setFilter] = useState<Filter>({ kind: "all" });
   // Packages start open: opening a card only to reach more cards is a wasted click.
@@ -86,15 +66,7 @@ export function App({ model }: { model: CompressedDiff }) {
       <a href="#changes" className="sr-only focus:not-sr-only focus:absolute focus:z-[60] focus:m-2 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground">
         Skip to changed code
       </a>
-      <header className="sticky top-0 z-50 border-b bg-background/85 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-screen-2xl items-center justify-between gap-4 px-4 md:px-8">
-          <span className="flex items-center gap-2 text-base font-semibold tracking-tight">
-            <DuckIcon />
-            DuckDiff
-          </span>
-          <ThemeToggle />
-        </div>
-      </header>
+      <Navbar home={home} />
       <main className="mx-auto max-w-screen-2xl space-y-8 px-4 py-6 md:px-8 md:py-8">
         <div className="space-y-4">
           <div className="min-w-0 space-y-1">
@@ -149,6 +121,7 @@ export function App({ model }: { model: CompressedDiff }) {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 id="changes-heading" className="text-lg font-medium">What changed</h2>
               <div className="flex flex-wrap gap-2">
+                {actions}
                 <Button type="button" size="sm" onClick={() => setExpanded(allParents(model.nodes))}>Expand all</Button>
                 <Button type="button" size="sm" onClick={() => setExpanded(new Set())}>Collapse all</Button>
               </div>

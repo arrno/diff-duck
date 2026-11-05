@@ -1,4 +1,4 @@
-// Package verify exercises the duck-diff binary through its real CLI entry point, against
+// Package verify exercises the diff-duck binary through its real CLI entry point, against
 // a real Git repository, and checks structure against independent oracles.
 package verify
 
@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/arrno/duck-diff/internal/domain"
+	"github.com/arrno/diff-duck/internal/domain"
 )
 
 var (
@@ -22,11 +22,11 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	work, err := os.MkdirTemp("", "duck-diff-e2e-")
+	work, err := os.MkdirTemp("", "diff-duck-e2e-")
 	must(err)
 	defer os.RemoveAll(work)
-	binary = filepath.Join(work, "duck-diff")
-	out, err := exec.Command("go", "build", "-tags", "verify", "-o", binary, "../cmd/duck-diff").CombinedOutput()
+	binary = filepath.Join(work, "diff-duck")
+	out, err := exec.Command("go", "build", "-tags", "verify", "-o", binary, "../cmd/diff-duck").CombinedOutput()
 	must(wrap(err, out))
 	fixture = filepath.Join(work, "fixture")
 	out, err = exec.Command("./make-fixture.sh", fixture).CombinedOutput()

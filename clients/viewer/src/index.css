@@ -118,6 +118,10 @@
 
 @layer base {
   * { @apply border-border; }
+  /* Short and long pages keep the same width, so the layout never jumps between them. */
+  html { scrollbar-gutter: stable; }
+  /* The gutter already holds the scrollbar's place, so modals must not make room for it again. */
+  html body[data-scroll-locked] { margin-right: 0 !important; }
   body { @apply bg-background text-foreground font-sans antialiased; }
   button { cursor: pointer; }
   :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }

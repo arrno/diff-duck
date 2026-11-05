@@ -5,7 +5,7 @@ package cli
 import (
 	"fmt"
 
-	"github.com/arrno/duck-diff/internal/services/ports"
+	"github.com/arrno/diff-duck/internal/services/ports"
 )
 
 // verificationModel rejects every name: canned output is not reachable from a release build.

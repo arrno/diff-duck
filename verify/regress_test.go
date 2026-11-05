@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/arrno/duck-diff/internal/domain"
+	"github.com/arrno/diff-duck/internal/domain"
 )
 
 // scenario is a throwaway repository with commits tagged base and head.
@@ -389,7 +389,7 @@ func TestOutputDoesNotFollowPlantedSymlinks(t *testing.T) {
 
 	victim := filepath.Join(t.TempDir(), "victim.txt")
 	must(os.WriteFile(victim, []byte("precious"), 0o644))
-	dir := filepath.Join(s.dir, "duck-diff-out", name)
+	dir := filepath.Join(s.dir, "diff-duck-out", name)
 	must(os.MkdirAll(dir, 0o755))
 	must(os.Symlink(victim, filepath.Join(dir, "index.html")))
 	runIn(t, s.dir, "--structure-only", ".", "base", "head")
@@ -397,10 +397,10 @@ func TestOutputDoesNotFollowPlantedSymlinks(t *testing.T) {
 		t.Fatal("a planted file symlink redirected the output")
 	}
 
-	must(os.RemoveAll(filepath.Join(s.dir, "duck-diff-out")))
+	must(os.RemoveAll(filepath.Join(s.dir, "diff-duck-out")))
 	elsewhere := t.TempDir()
-	must(os.MkdirAll(filepath.Join(s.dir, "duck-diff-out"), 0o755))
-	must(os.Symlink(elsewhere, filepath.Join(s.dir, "duck-diff-out", name)))
+	must(os.MkdirAll(filepath.Join(s.dir, "diff-duck-out"), 0o755))
+	must(os.Symlink(elsewhere, filepath.Join(s.dir, "diff-duck-out", name)))
 	code, out := runIn(t, s.dir, "--structure-only", ".", "base", "head")
 	if entries, _ := os.ReadDir(elsewhere); len(entries) != 0 {
 		t.Fatalf("a planted directory symlink redirected the output (exit %d: %s)", code, out)
@@ -442,7 +442,7 @@ func TestUnknownScriptedBehaviorIsRejected(t *testing.T) {
 
 func TestProductionBinaryHasNoScriptedModel(t *testing.T) {
 	bin := filepath.Join(t.TempDir(), "prod")
-	out, err := exec.Command("go", "build", "-o", bin, "../cmd/duck-diff").CombinedOutput()
+	out, err := exec.Command("go", "build", "-o", bin, "../cmd/diff-duck").CombinedOutput()
 	must(wrap(err, out))
 	cmd := exec.Command(bin, "--adapter", "scripted:normal", "--no-cache", "--out", t.TempDir(), fixture, "base", "head")
 	if err := cmd.Run(); err == nil {

@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/arrno/duck-diff/internal/domain"
-	"github.com/arrno/duck-diff/internal/services/ports"
+	"github.com/arrno/diff-duck/internal/domain"
+	"github.com/arrno/diff-duck/internal/services/ports"
 )
 
 // ErrNoExplanations means every model call failed. The structural diff is still returned, so
@@ -23,6 +23,14 @@ type CompressRequest struct {
 	StructureOnly bool
 	// MaxModelCalls limits model calls; 0 means no limit. Work beyond it stays visibly unexplained.
 	MaxModelCalls int
+	// Progress, when set, receives a plain description of each stage as it starts.
+	Progress func(stage string)
+}
+
+func (r CompressRequest) report(stage string) {
+	if r.Progress != nil {
+		r.Progress(stage)
+	}
 }
 
 // DiffCompressor runs the pipeline from a commit pair to a compressed diff.
@@ -59,6 +67,7 @@ func (c *DiffCompressor) Compress(ctx context.Context, req CompressRequest) (*do
 		}
 	}
 
+	req.report("Reading the changes")
 	baseSHA, err := c.repo.ResolveCommit(ctx, req.Base)
 	if err != nil {
 		return nil, err
@@ -133,8 +142,10 @@ func (c *DiffCompressor) Compress(ctx context.Context, req CompressRequest) (*do
 			parentPrompt: system[promptParent],
 			concurrency:  c.concurrency,
 		}
+		req.report("Explaining the code")
 		result.Warnings = append(result.Warnings, compressor.Compress(ctx, roots)...)
 		runner.setLimit(req.MaxModelCalls)
+		req.report("Finding the outcomes")
 		identifyOutcomes(ctx, runner, system[promptOutcomes], result)
 	}
 
