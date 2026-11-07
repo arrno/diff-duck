@@ -1,4 +1,5 @@
-// Package sqlitestore implements ports.DiffStore with a single SQLite file.
+// Package sqlitestore implements ports.DiffStore and ports.SettingsStore with a single SQLite
+// file.
 package sqlitestore
 
 import (
@@ -37,7 +38,12 @@ CREATE TABLE IF NOT EXISTS diffs (
 	finished_at INTEGER,
 	result      BLOB
 );
-CREATE INDEX IF NOT EXISTS diffs_created_at ON diffs (created_at DESC);`
+CREATE INDEX IF NOT EXISTS diffs_created_at ON diffs (created_at DESC);
+CREATE TABLE IF NOT EXISTS settings (
+	id            INTEGER PRIMARY KEY CHECK (id = 1),
+	provider      TEXT NOT NULL,
+	reading_level TEXT NOT NULL
+);`
 
 const summaryColumns = `id, repository, base, head, base_sha, head_sha, status, stage, error, overview, files, added, removed, created_at, finished_at`
 

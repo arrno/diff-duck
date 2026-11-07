@@ -101,3 +101,51 @@ type PromptSource interface {
 	// Variant names the set of prompts this source provides.
 	Variant() string
 }
+
+// SettingsStore keeps the app-wide model settings across restarts.
+type SettingsStore interface {
+	// LoadSettings returns the saved settings, ErrSettingsNotSaved when none have been saved,
+	// or ErrSavedSettingsInvalid when what was saved no longer passes domain validation.
+	// It never returns settings that fail domain validation.
+	LoadSettings(ctx context.Context) (domain.ModelSettings, error)
+	// SaveSettings replaces the saved settings. It rejects settings that fail domain validation.
+	SaveSettings(ctx context.Context, settings domain.ModelSettings) error
+}
+
+var (
+	// ErrSettingsNotSaved means no settings have been saved yet.
+	ErrSettingsNotSaved = errors.New("settings not saved")
+	// ErrSavedSettingsInvalid means the saved settings name an unknown provider or reading level.
+	ErrSavedSettingsInvalid = errors.New("saved settings are not valid")
+)
+
+// SecretStore keeps one API key per model provider in the OS keychain. It never hands a key
+// back; KeySource does, for model construction only.
+//
+// K1: a key lives only in the keychain and in process memory while a model is built from it.
+// Implementations must never write a key anywhere else or include it in an error. They reject
+// providers that do not use a key (domain.ModelProvider.NeedsKey).
+type SecretStore interface {
+	// SaveKey stores the provider's key, replacing any saved one.
+	SaveKey(provider domain.ModelProvider, key string) error
+	// HasKey reports whether a key is saved for the provider.
+	HasKey(provider domain.ModelProvider) (bool, error)
+	// ClearKey removes the provider's key. Clearing a key that is not saved is not an error.
+	ClearKey(provider domain.ModelProvider) error
+}
+
+// KeySource reads a saved API key so a model can be built from it. Only model construction
+// depends on it, and the key must not outlive that use (K1).
+type KeySource interface {
+	// LoadKey returns the provider's key, or ErrKeyNotSaved.
+	LoadKey(provider domain.ModelProvider) (string, error)
+}
+
+// ErrKeyNotSaved means no API key is saved for the provider.
+var ErrKeyNotSaved = errors.New("no API key saved")
+
+// ProviderAvailability reports whether a provider can be used on this machine, such as whether
+// a CLI provider's binary is on PATH. It says nothing about saved keys.
+type ProviderAvailability interface {
+	Available(provider domain.ModelProvider) bool
+}
