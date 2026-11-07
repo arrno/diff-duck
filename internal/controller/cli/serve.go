@@ -16,7 +16,6 @@ import (
 
 	"github.com/arrno/diff-duck/internal/adapters/gitrepo"
 	"github.com/arrno/diff-duck/internal/adapters/goanalysis"
-	"github.com/arrno/diff-duck/internal/adapters/keyring"
 	"github.com/arrno/diff-duck/internal/adapters/sqlitestore"
 	"github.com/arrno/diff-duck/internal/controller/htmlview"
 	"github.com/arrno/diff-duck/internal/controller/server"
@@ -31,8 +30,9 @@ type serveOptions struct {
 	dbPath string
 	noOpen bool
 	args   []string
-	// adapterPinned is set when --adapter was given, which overrides the saved provider.
-	adapterPinned bool
+	// pinned is the --adapter value when it was set explicitly, which overrides the provider
+	// chosen in the app. It is empty when the flag was left at its default.
+	pinned string
 }
 
 func runServe(ctx context.Context, args []string, stdout, stderr io.Writer) int {
@@ -42,6 +42,7 @@ func runServe(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 		return code
 	}
 	opts.args = args
+	opts.pinned = pinnedAdapter(fs)
 	if err := serve(ctx, opts, stdout); err != nil {
 		fmt.Fprintln(stderr, "error:", printable(err.Error()))
 		return exitFailure
@@ -70,8 +71,18 @@ func parseServe(fs *flag.FlagSet, args []string, opts *serveOptions) (int, bool)
 		fs.Usage()
 		return exitUsage, false
 	}
-	fs.Visit(func(f *flag.Flag) { opts.adapterPinned = opts.adapterPinned || f.Name == "adapter" })
 	return 0, true
+}
+
+// pinnedAdapter is the --adapter value when the flag was set explicitly, or empty.
+func pinnedAdapter(fs *flag.FlagSet) string {
+	pinned := ""
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "adapter" {
+			pinned = f.Value.String()
+		}
+	})
+	return pinned
 }
 
 func serve(ctx context.Context, opts serveOptions, stdout io.Writer) error {
@@ -91,7 +102,11 @@ func serve(ctx context.Context, opts serveOptions, stdout io.Writer) error {
 	}
 	defer store.Close()
 
-	models := modelOpener{opts: opts.options, pinned: opts.adapterPinned, keys: keyring.New(), available: installedProviders{}}
+	// One keychain and one availability check for the whole process, shared by the settings
+	// and by model building.
+	keys := secretStore()
+	available := installedProviders{}
+	models := modelOpener{opts: opts.options, pinned: opts.pinned != "", keys: keys, available: available}
 	if models.pinned {
 		// A pinned adapter that cannot work fails now rather than on every diff.
 		check, err := openAdapter(opts.options)
@@ -109,13 +124,18 @@ func serve(ctx context.Context, opts serveOptions, stdout io.Writer) error {
 		return err
 	}
 
-	library := services.NewDiffLibrary(services.LibraryDeps{
+	settings := services.NewSettingsKeeper(services.SettingsDeps{
 		Store:        store,
-		Repositories: gitrepo.Source{},
-		Analyzer:     goanalysis.New(),
-		Models:       models,
-		// S5 stand-in for S6's SettingsKeeper composition; integration points this at S6's keeper.
-		Settings:      services.NewSettingsKeeper(services.SettingsDeps{Store: store, Secrets: keyring.New(), Availability: installedProviders{}}),
+		Secrets:      keys,
+		Availability: available,
+		Pinned:       opts.pinned,
+	})
+	library := services.NewDiffLibrary(services.LibraryDeps{
+		Store:         store,
+		Repositories:  gitrepo.Source{},
+		Analyzer:      goanalysis.New(),
+		Models:        models,
+		Settings:      settings,
 		Prompts:       prompts,
 		Concurrency:   opts.concurrency,
 		MaxModelCalls: opts.maxModelCalls,
@@ -131,7 +151,7 @@ func serve(ctx context.Context, opts serveOptions, stdout io.Writer) error {
 	}
 	port := listener.Addr().(*net.TCPAddr).Port
 	httpServer := &http.Server{
-		Handler:           server.Handler(library, page, port),
+		Handler:           server.Handler(library, settings, page, port),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	url := fmt.Sprintf("http://127.0.0.1:%d/", port)

@@ -127,18 +127,8 @@ func (o modelOpener) Open(_ context.Context, settings domain.ModelSettings) (por
 func (o modelOpener) openProvider(p domain.ModelProvider) (ports.LanguageModel, func(), error) {
 	id, effort := o.opts.modelID(p), o.opts.effort
 	switch p {
-	case domain.ProviderClaudeCode:
-		m, err := claudecli.New("", id, effort)
-		if err != nil {
-			return nil, nil, err
-		}
-		return m, m.Close, nil
-	case domain.ProviderCodex:
-		m, err := codexcli.New("", id, effort)
-		if err != nil {
-			return nil, nil, err
-		}
-		return m, m.Close, nil
+	case domain.ProviderClaudeCode, domain.ProviderCodex:
+		return cliModel(p, id, effort)
 	case domain.ProviderAnthropicAPI, domain.ProviderOpenAIAPI:
 		// K1: the key lives only in this frame and the client built from it.
 		key, err := o.keys.LoadKey(p)
@@ -162,25 +152,35 @@ func (o modelOpener) openProvider(p domain.ModelProvider) (ports.LanguageModel, 
 	return nil, nil, domain.ErrUnknownProvider
 }
 
+// cliModel builds a CLI provider's model, which needs no key, and the func that releases it.
+func cliModel(p domain.ModelProvider, id, effort string) (ports.LanguageModel, func(), error) {
+	if p == domain.ProviderCodex {
+		m, err := codexcli.New("", id, effort)
+		if err != nil {
+			return nil, nil, err
+		}
+		return m, m.Close, nil
+	}
+	m, err := claudecli.New("", id, effort)
+	if err != nil {
+		return nil, nil, err
+	}
+	return m, m.Close, nil
+}
+
 // openAdapter opens the adapter --adapter names. The one-shot command always uses it, and the
-// app uses it when pinned.
+// app uses it when pinned. API keys come from the environment here, not the keychain.
 func openAdapter(opts options) (ports.OpenedModel, error) {
 	p := adapterProvider(opts.adapter)
 	id, effort := opts.modelID(p), opts.effort
 	opened := ports.OpenedModel{Provider: p, Close: func() {}}
 	switch opts.adapter {
-	case adapterClaudeCLI:
-		m, err := claudecli.New("", id, effort)
+	case adapterClaudeCLI, adapterCodexCLI:
+		m, release, err := cliModel(p, id, effort)
 		if err != nil {
 			return ports.OpenedModel{}, err
 		}
-		opened.Model, opened.Close = m, m.Close
-	case adapterCodexCLI:
-		m, err := codexcli.New("", id, effort)
-		if err != nil {
-			return ports.OpenedModel{}, err
-		}
-		opened.Model, opened.Close = m, m.Close
+		opened.Model, opened.Close = m, release
 	case adapterAnthropicAPI:
 		opened.Model = anthropicapi.New(id, effort)
 	case adapterOpenAIAPI:

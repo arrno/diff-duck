@@ -25,6 +25,11 @@ const testPort = 7474
 
 func handler(t *testing.T) http.Handler {
 	t.Helper()
+	return handlerWith(t, &fakeSettings{})
+}
+
+func handlerWith(t *testing.T, settings SettingsKeeper) http.Handler {
+	t.Helper()
 	store, err := sqlitestore.Open(context.Background(), filepath.Join(t.TempDir(), "diffs.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -34,7 +39,7 @@ func handler(t *testing.T) http.Handler {
 		library.Shutdown()
 		store.Close()
 	})
-	return Handler(library, []byte("<!doctype html>the page"), testPort)
+	return Handler(library, settings, []byte("<!doctype html>the page"), testPort)
 }
 
 const ownHost = "127.0.0.1:7474"

@@ -164,7 +164,8 @@ type ModelOpener interface {
 	Open(ctx context.Context, settings domain.ModelSettings) (OpenedModel, error)
 }
 
-// OpenedModel is a model ready for one run. Close releases it when the run ends.
+// OpenedModel is a model ready for one run. Close releases it when the run ends; it is never
+// nil.
 type OpenedModel struct {
 	Model LanguageModel
 	// Provider is the provider the model belongs to. It is empty for a model no person can

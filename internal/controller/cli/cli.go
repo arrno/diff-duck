@@ -133,7 +133,7 @@ func addModelFlags(fs *flag.FlagSet, opts *options) {
 	fs.StringVar(&opts.adapter, "adapter", adapterClaudeCLI, "model adapter: "+adapterNames)
 	fs.StringVar(&opts.model, "model", "", "model ID for the --adapter provider only (default: that provider's default model)")
 	fs.StringVar(&opts.effort, "effort", "medium", "model effort for every provider: low, medium, high, xhigh, or max")
-	fs.StringVar(&opts.promptsDir, "prompts", "", "prompt variant directory holding leaf.md, parent.md, outcomes.md (default: built in)")
+	fs.StringVar(&opts.promptsDir, "prompts", "", "prompt variant directory holding leaf.md, parent.md, outcomes.md, and reading-levels/<level>.md (default: built in)")
 	fs.IntVar(&opts.concurrency, "concurrency", 4, "maximum concurrent model calls")
 	fs.BoolVar(&opts.noCache, "no-cache", false, "ignore and do not write the model response cache")
 	fs.StringVar(&opts.cacheDir, "cache-dir", "", "model response cache directory (default: the user cache directory)")

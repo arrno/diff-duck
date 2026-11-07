@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -78,6 +80,70 @@ func TestTheSavedAPIProviderIsOpenedWithItsKeychainKey(t *testing.T) {
 			t.Errorf("%s: %s %s", p, opened.Provider, opened.Model.Describe())
 		}
 		opened.Close()
+	}
+}
+
+// recordingKeys is a keychain that records which provider each key was read for.
+type recordingKeys struct {
+	keys
+	asked []domain.ModelProvider
+}
+
+func (k *recordingKeys) LoadKey(p domain.ModelProvider) (string, error) {
+	k.asked = append(k.asked, p)
+	return k.keys.LoadKey(p)
+}
+
+func TestEachAPIProviderUsesOnlyItsOwnKey(t *testing.T) {
+	k := &recordingKeys{keys: keys{domain.ProviderAnthropicAPI: secret}}
+	o := modelOpener{opts: defaultOptions(), keys: k, available: everyProvider()}
+	opened, err := o.Open(context.Background(), settingsFor(domain.ProviderAnthropicAPI))
+	if err != nil {
+		t.Fatal(err)
+	}
+	opened.Close()
+	// Another provider's saved key never stands in for a missing one.
+	if _, err := o.Open(context.Background(), settingsFor(domain.ProviderOpenAIAPI)); !errors.Is(err, ports.ErrKeyNotSaved) || !strings.Contains(err.Error(), "OpenAI API") {
+		t.Fatalf("got %v", err)
+	}
+	if len(k.asked) != 2 || k.asked[0] != domain.ProviderAnthropicAPI || k.asked[1] != domain.ProviderOpenAIAPI {
+		t.Fatalf("keys read for %v", k.asked)
+	}
+}
+
+func TestTheSavedCLIProviderRunsItsOwnCLI(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"claude", "codex"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", dir)
+	o := modelOpener{opts: defaultOptions(), keys: keys{}, available: installedProviders{}}
+	for p, want := range map[domain.ModelProvider]string{
+		domain.ProviderClaudeCode: "claude-cli/" + defaultClaudeCodeModel + "/medium",
+		domain.ProviderCodex:      "codex-cli/" + defaultCodexModel + "/medium",
+	} {
+		opened, err := o.Open(context.Background(), settingsFor(p))
+		if err != nil {
+			t.Fatalf("%s: %v", p, err)
+		}
+		if opened.Provider != p || opened.Model.Describe() != want {
+			t.Errorf("%s: %s %s", p, opened.Provider, opened.Model.Describe())
+		}
+		opened.Close()
+	}
+}
+
+func TestEachAdapterNameRecordsItsProvider(t *testing.T) {
+	for name, want := range map[string]domain.ModelProvider{
+		adapterClaudeCLI: domain.ProviderClaudeCode, adapterCodexCLI: domain.ProviderCodex,
+		adapterAnthropicAPI: domain.ProviderAnthropicAPI, adapterOpenAIAPI: domain.ProviderOpenAIAPI,
+		"scripted:normal": "",
+	} {
+		if got := adapterProvider(name); got != want {
+			t.Errorf("%s: %q", name, got)
+		}
 	}
 }
 
@@ -170,32 +236,28 @@ func TestOpenedModelsAreCachedUnlessDisabled(t *testing.T) {
 	}
 }
 
-func TestOnlyAnExplicitAdapterPinsTheApp(t *testing.T) {
-	for args, want := range map[string]bool{"": false, "--model x": false, "--adapter claude-cli": true, "--adapter=scripted:normal": true} {
-		var opts serveOptions
-		fs := serveFlags(&opts, io.Discard, "test")
-		if _, ok := parseServe(fs, strings.Fields(args), &opts); !ok {
-			t.Fatalf("%q did not parse", args)
-		}
-		if opts.adapterPinned != want {
-			t.Errorf("%q: pinned %v", args, opts.adapterPinned)
-		}
-	}
-}
-
 func TestOneShotReadingLevelIsValidated(t *testing.T) {
 	if code := Run(context.Background(), []string{"--reading-level", "../leaf", "repo", "a", "b"}, io.Discard, io.Discard); code != exitUsage {
 		t.Fatalf("exit %d", code)
 	}
 }
 
-func TestInstalledProvidersAlwaysOfferAPIProviders(t *testing.T) {
-	t.Setenv("PATH", t.TempDir())
-	a := installedProviders{}
-	if a.Available(domain.ProviderClaudeCode) || a.Available(domain.ProviderCodex) {
-		t.Error("a CLI provider without its binary on PATH must be unavailable")
+func TestCLIProvidersAreAvailableOnlyWhenTheirBinaryIsOnPath(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "codex"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
 	}
-	if !a.Available(domain.ProviderAnthropicAPI) || !a.Available(domain.ProviderOpenAIAPI) || a.Available("google") {
-		t.Error("API providers are available; unknown ones are not")
+	t.Setenv("PATH", dir)
+	a := installedProviders{}
+	for provider, want := range map[domain.ModelProvider]bool{
+		domain.ProviderClaudeCode:   false,
+		domain.ProviderCodex:        true,
+		domain.ProviderAnthropicAPI: true,
+		domain.ProviderOpenAIAPI:    true,
+		"gemini":                    false,
+	} {
+		if got := a.Available(provider); got != want {
+			t.Errorf("%s: got %t, want %t", provider, got, want)
+		}
 	}
 }

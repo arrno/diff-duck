@@ -45,6 +45,8 @@ type recordingOpener struct {
 	closed   int
 	err      error
 	model    *fakeModel
+	// pinned, when set, is the provider used whatever the settings say.
+	pinned *domain.ModelProvider
 }
 
 func (o *recordingOpener) Open(_ context.Context, s domain.ModelSettings) (ports.OpenedModel, error) {
@@ -59,7 +61,11 @@ func (o *recordingOpener) Open(_ context.Context, s domain.ModelSettings) (ports
 		o.closed++
 		o.mu.Unlock()
 	}
-	return ports.OpenedModel{Model: o.model, Provider: s.Provider, Close: release}, nil
+	provider := s.Provider
+	if o.pinned != nil {
+		provider = *o.pinned
+	}
+	return ports.OpenedModel{Model: o.model, Provider: provider, Close: release}, nil
 }
 
 func (o *recordingOpener) opened() ([]domain.ModelSettings, int) {
@@ -131,6 +137,21 @@ func TestEachRunUsesTheSavedSettingsAndRecordsThem(t *testing.T) {
 		t.Fatalf("one open per run, with that run's settings: %+v", got)
 	}
 	waitFor(t, func() bool { _, closed := opener.opened(); return closed == 2 })
+}
+
+func TestTheRecordedProviderIsTheOneTheModelCameFrom(t *testing.T) {
+	store := newMemoryStore()
+	settings := &settingsStore{saved: &domain.ModelSettings{Provider: domain.ProviderCodex, ReadingLevel: domain.ReadingCollege}}
+	// As when the app is pinned: the opener uses another provider than the one saved.
+	used := domain.ProviderAnthropicAPI
+	opener := &recordingOpener{model: &fakeModel{answer: answerAll}, pinned: &used}
+	l := modelLibrary(store, &openRepo{fakeRepo: fakeRepo{changes: []domain.FileChange{textChange("a.txt")}}}, opener, settings)
+	defer l.Shutdown()
+	started, _ := l.StartDiff(context.Background(), "/repo", "a", "b")
+	d := finished(t, store, started.ID)
+	if g := d.Result.Generation; g.Provider != used || g.ReadingLevel != domain.ReadingCollege {
+		t.Fatalf("the provider must be the one used, and the level the one saved: %+v", g)
+	}
 }
 
 func TestARequestedDiffKeepsTheSettingsItWasRequestedWith(t *testing.T) {

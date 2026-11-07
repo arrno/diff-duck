@@ -215,9 +215,7 @@ func (l *DiffLibrary) compress(ctx context.Context, diff *domain.SavedDiff, sett
 	if err != nil {
 		return nil, err
 	}
-	if opened.Close != nil {
-		defer opened.Close()
-	}
+	defer opened.Close()
 	progress("Opening the repository")
 	repo, err := l.deps.Repositories.Open(ctx, diff.Repository)
 	if err != nil {
