@@ -179,3 +179,8 @@ provider with no key saved and none given is a 400.
   the real ProviderAvailability in `internal/controller/cli/model_opener.go`, and does not edit
   S6's file. The orchestrator deletes S6's stand-in at integration and points SettingsKeeper at
   S5's implementation.
+- **S6 done** (merged). `GET/PUT /api/settings`, `DELETE /api/settings/keys/{provider}`; viewer
+  ProviderMenu wired; the verify build uses an in-memory keychain mock; `verify/run.sh` stubs
+  `claude`/`codex` on PATH.
+- **Reassigned to S5:** delete S6's stand-in availability, share serve's one keychain as KeySource,
+  fix pinned Save (skip availability and key checks while pinned), and add a settings-survive-restart test.
