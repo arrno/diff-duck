@@ -223,3 +223,11 @@ provider with no key saved and none given is a 400.
 - **For integration:** unify the MODULE signature format across Python/JS/Rust; move
   `rsNextSibling` into `tree.go`; share the package-ref, reserve/finish, and generated-header code in
   `extract.go`. Process lesson: give each parallel agent its own scratch directory (they collided).
+- **S7c C# done** (merged). Package = dir + namespace (per unit when a file has several);
+  partial classes share package + type; callables always named with parameter types. Differ's
+  `packageExists` now also accepts any package a file's units declare (accepted). Binary +5.3 MiB.
+- **User decision:** generated-file headers stay trusted (shown with full coverage, not summarized).
+- **Binary size:** main 26.2 MB -> epic 71.9 MB. Grammars and wazero are about 15 MB of that; the
+  OpenAI Go SDK alone is about 30 MB. Whether to replace it is pending a user decision.
+- **Integration fixes step:** in progress (shared text slices, scaffolding consolidation, MODULE
+  signature, ctx in extraction, kind-safe pairing, rename message, flaky Codex test).
