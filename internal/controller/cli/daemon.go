@@ -90,8 +90,8 @@ func runStatus(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	return exitOK
 }
 
-// runReset deletes every saved diff by removing the database. A running server is stopped
-// first and started again afterwards with the same settings.
+// runReset deletes every saved diff. The model settings stay. A running server is stopped
+// first and started again afterwards with the same flags.
 func runReset(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("diffduck reset", flag.ContinueOnError)
 	flags.SetOutput(stderr)
@@ -132,16 +132,20 @@ func runReset(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 			return fail(stderr, err)
 		}
 	}
-	if err := sqlitestore.Remove(db); err != nil {
-		return fail(stderr, err)
+	cleared := sqlitestore.ClearDiffs(ctx, db)
+	if cleared == nil {
+		fmt.Fprintln(stdout, "Deleted every saved diff.")
 	}
-	fmt.Fprintln(stdout, "Deleted every saved diff.")
+	// A failed reset still brings back the app it stopped.
 	if r != nil {
 		restarted, err := startServer(ctx, dir, r.Args)
 		if err != nil {
-			return fail(stderr, err)
+			return fail(stderr, errors.Join(cleared, err))
 		}
 		fmt.Fprintf(stdout, "DiffDuck is running again at %s\n", restarted.url())
+	}
+	if cleared != nil {
+		return fail(stderr, cleared)
 	}
 	return exitOK
 }

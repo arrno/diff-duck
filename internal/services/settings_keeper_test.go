@@ -400,6 +400,28 @@ func TestKeyFormatBoundaries(t *testing.T) {
 	}
 }
 
+// Pinned to a real provider, the view reports it beside the saved provider, which saves keep.
+func TestPinnedToAProviderReportsItBesideTheSavedOne(t *testing.T) {
+	saved := domain.ModelSettings{Provider: domain.ProviderClaudeCode, ReadingLevel: domain.ReadingSixthGrade}
+	store := &settingsStore{saved: &saved}
+	k := NewSettingsKeeper(SettingsDeps{
+		Store: store, Secrets: newSecretStore(), Availability: availability{},
+		Pinned: "openai-api", PinnedProvider: domain.ProviderOpenAIAPI,
+	})
+	view, err := k.Current(context.Background())
+	if err != nil || view.PinnedProvider != domain.ProviderOpenAIAPI || view.Provider != domain.ProviderClaudeCode || view.Pinned != "openai-api" {
+		t.Fatalf("current: %v %+v", err, view)
+	}
+	view, err = k.Save(context.Background(), "claude-code", "phd", "")
+	if err != nil || view.PinnedProvider != domain.ProviderOpenAIAPI || store.saved.Provider != domain.ProviderClaudeCode {
+		t.Fatalf("save: %v %+v saved %+v", err, view, store.saved)
+	}
+	unpinned := NewSettingsKeeper(SettingsDeps{Store: store, Secrets: newSecretStore(), Availability: availability{}})
+	if view, _ := unpinned.Current(context.Background()); view.PinnedProvider != "" {
+		t.Fatalf("nothing pinned, no pinned provider: %+v", view)
+	}
+}
+
 func TestWhilePinnedTheReadingLevelCanBeSavedForAnyProvider(t *testing.T) {
 	store := &settingsStore{}
 	secrets := newSecretStore()

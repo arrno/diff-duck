@@ -31,6 +31,9 @@ type SettingsDeps struct {
 	Availability ports.ProviderAvailability
 	// Pinned names the adapter set explicitly when the app started, or is empty.
 	Pinned string
+	// PinnedProvider is the provider the pinned adapter belongs to. It is empty when nothing
+	// is pinned or the pinned adapter is no provider a person can choose (verification).
+	PinnedProvider domain.ModelProvider
 }
 
 // SettingsView is what a person may know about the model settings. It never holds a key.
@@ -38,7 +41,10 @@ type SettingsView struct {
 	Provider     domain.ModelProvider `json:"provider"`
 	ReadingLevel domain.ReadingLevel  `json:"readingLevel"`
 	Pinned       string               `json:"pinned"`
-	Providers    []ProviderStatus     `json:"providers"`
+	// PinnedProvider is the provider every run uses while pinned, which may differ from the
+	// saved Provider; empty when nothing is pinned or the pin is no choosable provider.
+	PinnedProvider domain.ModelProvider `json:"pinnedProvider"`
+	Providers      []ProviderStatus     `json:"providers"`
 }
 
 // ProviderStatus says whether a provider can be chosen.
@@ -85,7 +91,12 @@ func (k *SettingsKeeper) Current(ctx context.Context) (SettingsView, error) {
 	if err != nil {
 		return SettingsView{}, err
 	}
-	view := SettingsView{Provider: settings.Provider, ReadingLevel: settings.ReadingLevel, Pinned: k.deps.Pinned}
+	view := SettingsView{
+		Provider:       settings.Provider,
+		ReadingLevel:   settings.ReadingLevel,
+		Pinned:         k.deps.Pinned,
+		PinnedProvider: k.deps.PinnedProvider,
+	}
 	for _, p := range domain.ModelProviders() {
 		status := ProviderStatus{ID: p, Label: p.Label(), Available: k.deps.Availability.Available(p), NeedsKey: p.NeedsKey()}
 		if p.NeedsKey() {

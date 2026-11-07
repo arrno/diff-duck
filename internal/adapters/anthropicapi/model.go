@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
+	"time"
 
 	"github.com/anthropics/anthropic-sdk-go/v2"
 	"github.com/anthropics/anthropic-sdk-go/v2/option"
@@ -29,15 +31,38 @@ type Model struct {
 // profile).
 func New(model, effort string) *Model { return newWithOptions(model, effort) }
 
-// NewWithKey returns an API model that authenticates with apiKey and nothing else: no
-// credential is read from the environment or a profile.
+// NewWithKey returns an API model that authenticates with apiKey and nothing else, and sends
+// it only to the Anthropic API. Nothing is read from the environment or a profile: no
+// credential, and no ANTHROPIC_BASE_URL or ANTHROPIC_CUSTOM_HEADERS, so a keychain key never
+// goes to a gateway set up for another tool (K1). New keeps the SDK's usual environment
+// handling for --adapter anthropic-api.
 func NewWithKey(apiKey, model, effort string) (*Model, error) {
+	return newWithKey(apiKey, model, effort)
+}
+
+// newWithKey is NewWithKey; tests add options, such as a stand-in HTTP client.
+func newWithKey(apiKey, model, effort string, extra ...option.RequestOption) (*Model, error) {
 	if strings.TrimSpace(apiKey) == "" {
 		return nil, errors.New("the anthropic api adapter needs an API key")
 	}
-	m := newWithOptions(model, effort, option.WithAPIKey(apiKey))
+	opts := append([]option.RequestOption{
+		option.WithoutEnvironmentDefaults(),
+		option.WithHTTPClient(httpClient()),
+		option.WithAPIKey(apiKey),
+	}, extra...)
+	m := newWithOptions(model, effort, opts...)
 	m.key = apiKey
 	return m, nil
+}
+
+// responseHeaderTimeout matches the SDK's default client, which WithoutEnvironmentDefaults
+// leaves out, so a server that accepts the connection but never answers cannot hang a run.
+const responseHeaderTimeout = 10 * time.Minute
+
+func httpClient() *http.Client {
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.ResponseHeaderTimeout = responseHeaderTimeout
+	return &http.Client{Transport: t}
 }
 
 func newWithOptions(model, effort string, opts ...option.RequestOption) *Model {

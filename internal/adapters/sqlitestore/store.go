@@ -16,7 +16,8 @@ import (
 	"github.com/arrno/diff-duck/internal/domain"
 	"github.com/arrno/diff-duck/internal/services/ports"
 
-	_ "modernc.org/sqlite" // Registers the database driver.
+	"modernc.org/sqlite" // Also registers the database driver.
+	sqlite3 "modernc.org/sqlite/lib"
 )
 
 const schema = `
@@ -80,13 +81,63 @@ func Open(ctx context.Context, path string) (*Store, error) {
 // Close closes the database.
 func (s *Store) Close() error { return s.db.Close() }
 
-// Remove deletes the database at path along with SQLite's side files. Nothing may have it open.
-// A database that does not exist is not an error.
-func Remove(path string) error {
+// ClearDiffs deletes every saved diff in the database at path and keeps everything else, such
+// as the model settings. Nothing else may have it open. A database that does not exist is not
+// an error, and none is created; side files a crash left behind are removed. A file SQLite
+// cannot read as a database is removed whole, since nothing in it can be kept.
+func ClearDiffs(ctx context.Context, path string) error {
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		return remove(path)
+	}
+	s, err := Open(ctx, path)
+	if unreadable(err) {
+		return remove(path)
+	}
+	if err != nil {
+		return err
+	}
+	return errors.Join(s.clearDiffs(ctx), s.Close())
+}
+
+// unreadable reports whether err says the file is not a database or is corrupt.
+func unreadable(err error) bool {
+	var e *sqlite.Error
+	if !errors.As(err, &e) {
+		return false
+	}
+	code := e.Code() & 0xff // the primary result code
+	return code == sqlite3.SQLITE_NOTADB || code == sqlite3.SQLITE_CORRUPT
+}
+
+// remove deletes the database at path along with SQLite's side files.
+func remove(path string) error {
 	for _, suffix := range []string{"", "-wal", "-shm", "-journal"} {
 		if err := os.Remove(path + suffix); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("remove saved diffs: %w", err)
 		}
+	}
+	return nil
+}
+
+// ErrDatabaseInUse means saved diffs were deleted, but another process has the database open,
+// so copies of their text stay in the write-ahead log until it closes the database.
+var ErrDatabaseInUse = errors.New("another process has the database open")
+
+// clearDiffs deletes every diff row. The rows held source code, so the file is then rebuilt
+// without their freed pages and the write-ahead log is emptied, leaving no copy on disk. A
+// checkpoint another process blocks is reported, never treated as success.
+func (s *Store) clearDiffs(ctx context.Context) error {
+	for _, stmt := range []string{`DELETE FROM diffs`, `VACUUM`} {
+		if _, err := s.db.ExecContext(ctx, stmt); err != nil {
+			return fmt.Errorf("delete saved diffs: %w", err)
+		}
+	}
+	var busy, logFrames, checkpointed int
+	if err := s.db.QueryRowContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE)`).Scan(&busy, &logFrames, &checkpointed); err != nil {
+		return fmt.Errorf("delete saved diffs: %w", err)
+	}
+	if busy != 0 || logFrames != 0 {
+		return fmt.Errorf("saved diffs were deleted, but %w: stop any other DiffDuck and run reset again to remove their last copies", ErrDatabaseInUse)
 	}
 	return nil
 }

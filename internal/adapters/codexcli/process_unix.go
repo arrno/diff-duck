@@ -7,6 +7,9 @@ import (
 	"syscall"
 )
 
+// canStopProcessTree is true here: killProcessGroup stops Codex and every process it started.
+const canStopProcessTree = true
+
 // killProcessGroup runs the command in its own process group and, when its context ends,
 // kills the whole group. The `codex` on PATH is often a Node wrapper around the native
 // binary, so killing only the direct child would leave the native Codex running.

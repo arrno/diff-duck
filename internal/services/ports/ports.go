@@ -157,6 +157,12 @@ type ProviderAvailability interface {
 // ModelOpener opens the language model one run uses, chosen from the effective settings.
 // An implementation may override the settings' provider, such as when the app was started
 // with an explicit adapter, and reports the provider it actually used.
+//
+// Open re-checks availability and the API key at run time on purpose, although
+// SettingsKeeper already checked both when the settings were saved: settings can change, a
+// CLI binary can disappear, and a key can be cleared between saving and running. The
+// keeper's checks are save-time validation that gives the person early feedback; these are
+// what keep a run from starting with a provider that cannot work.
 type ModelOpener interface {
 	// Open returns the model for a run with these settings. A provider that cannot be used
 	// returns an error a person can act on; a missing API key wraps ErrKeyNotSaved. Errors

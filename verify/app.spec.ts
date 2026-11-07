@@ -123,7 +123,7 @@ const stubProviders = (keySaved: boolean) => [
   { id: "anthropic-api", label: "Anthropic API", available: true, needsKey: true, keySaved },
   { id: "openai-api", label: "OpenAI API", available: true, needsKey: true, keySaved: false },
 ];
-const stubSettings = (keySaved: boolean) => ({ provider: "anthropic-api", readingLevel: "6th-grade", pinned: "", providers: stubProviders(keySaved) });
+const stubSettings = (keySaved: boolean) => ({ provider: "anthropic-api", readingLevel: "6th-grade", pinned: "", pinnedProvider: "", providers: stubProviders(keySaved) });
 const settingsAPI = (url: URL) => url.pathname.startsWith("/api/settings");
 
 test("an API provider takes a key that is never kept in the page", async ({ page }) => {
@@ -201,6 +201,45 @@ test("an API provider takes a key that is never kept in the page", async ({ page
   await expect(menu).toHaveCount(0);
   const stored = await page.evaluate(() => JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage }) + document.documentElement.outerHTML);
   expect(stored).not.toContain(key);
+});
+
+test("choosing another provider and saving sends that provider", async ({ page }) => {
+  const sent: string[] = [];
+  await page.route(settingsAPI, async (route) => {
+    if (route.request().method() === "PUT") sent.push(route.request().postData() ?? "");
+    return route.fulfill({ json: stubSettings(true) });
+  });
+  await page.goto(app);
+  await page.getByRole("button", { name: "Model settings" }).click();
+  const menu = page.getByRole("dialog", { name: "Model settings" });
+  const provider = menu.getByLabel("Provider");
+  await expect(provider).toHaveValue("anthropic-api");
+  await provider.selectOption("claude-code");
+  await menu.getByRole("button", { name: "Save" }).click();
+  await expect(menu).toHaveCount(0);
+  expect(sent).toEqual([JSON.stringify({ provider: "claude-code", readingLevel: "6th-grade" })]);
+});
+
+test("a server pinned to a provider shows that provider, and saving keeps the saved one", async ({ page }) => {
+  const sent: string[] = [];
+  await page.route(settingsAPI, async (route) => {
+    if (route.request().method() === "PUT") sent.push(route.request().postData() ?? "");
+    return route.fulfill({ json: { ...stubSettings(true), provider: "anthropic-api", pinned: "openai-api", pinnedProvider: "openai-api" } });
+  });
+  await page.goto(app);
+  await page.getByRole("button", { name: "Model settings" }).click();
+  const menu = page.getByRole("dialog", { name: "Model settings" });
+  const provider = menu.getByLabel("Provider");
+  await expect(provider).toBeDisabled();
+  await expect(provider).toHaveValue("openai-api");
+  await expect(provider.locator("option:checked")).toHaveText("OpenAI API");
+  await expect(menu.getByTestId("provider-pinned")).toContainText("--adapter openai-api");
+  // The saved provider's key is not offered beside a different, pinned provider.
+  await expect(menu.getByLabel("API key")).toHaveCount(0);
+  await noViolations(page);
+  await menu.getByRole("button", { name: "Save" }).click();
+  await expect(menu).toHaveCount(0);
+  expect(sent).toEqual([JSON.stringify({ provider: "anthropic-api", readingLevel: "6th-grade" })]);
 });
 
 test("closing the menu while a save is in flight leaves it usable", async ({ page }) => {
@@ -282,6 +321,19 @@ test("the saved diff is listed and survives a reload", async ({ page }) => {
   // The address names the diff, so reloading or bookmarking comes back to it.
   await page.reload();
   await expect(page.getByTestId("overview")).toBeVisible();
+});
+
+test("a diff names the provider that wrote it", async ({ page }) => {
+  // The pinned scripted server records no provider, so the saved diff is shown as Codex wrote it.
+  await page.route((url) => /^\/api\/diffs\/[^/]+$/.test(url.pathname), async (route) => {
+    const response = await route.fetch();
+    const diff = await response.json();
+    diff.result.generation.provider = "codex";
+    return route.fulfill({ response, json: diff });
+  });
+  await page.goto(app);
+  await page.getByTestId("diff-row").getByRole("link").click();
+  await expect(page.getByTestId("generation")).toContainText("Provider: Codex. Model:");
 });
 
 test("a bad commit fails visibly and can be retried or deleted", async ({ page }) => {

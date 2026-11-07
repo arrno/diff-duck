@@ -43,6 +43,8 @@ export interface Settings {
   readingLevel: ReadingLevelId;
   /** The adapter the server was started with, which overrides the provider; empty if none. */
   pinned: string;
+  /** The provider every run uses while pinned, which may differ from the saved one; empty when nothing is pinned or the pin is no provider (verification). */
+  pinnedProvider: ProviderId | "";
   providers: ProviderStatus[];
 }
 
