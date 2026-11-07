@@ -252,6 +252,9 @@ func (fakePrompts) Variant() string { return "fake" }
 func (fakePrompts) Load(name string) (string, domain.PromptInfo, error) {
 	return name, domain.PromptInfo{Name: name, Hash: name}, nil
 }
+func (fakePrompts) LoadReadingLevel(level domain.ReadingLevel) (string, domain.PromptInfo, error) {
+	return "LEVEL " + string(level), domain.PromptInfo{Name: "reading-levels/" + string(level), Hash: string(level)}, nil
+}
 
 func textChange(path string) domain.FileChange {
 	return domain.FileChange{Status: domain.FileModified, OldPath: path, NewPath: path, Hunks: []domain.Hunk{{Lines: []domain.DiffLine{{Kind: domain.LineAdded, NewLine: 1, Text: "x"}}}}}
@@ -262,6 +265,9 @@ func pipeline(t *testing.T, m ports.LanguageModel, req CompressRequest, changes 
 	repo := &fakeRepo{changes: changes}
 	c := NewDiffCompressor(repo, NewStructuralDiffer(repo), m, fakePrompts{}, 1)
 	req.Base, req.Head = "b", "h"
+	if req.ReadingLevel == "" {
+		req.ReadingLevel = domain.ReadingSixthGrade
+	}
 	return c.Compress(context.Background(), req)
 }
 
@@ -275,7 +281,7 @@ func TestNoExplanationsErrorOnlyWhenEveryCallFailed(t *testing.T) {
 
 	// Summaries work and outcomes fail: a partial result is not a total failure.
 	mixed := &fakeModel{answer: func(req ports.ModelRequest) (string, error) {
-		if req.System == promptOutcomes {
+		if strings.HasPrefix(req.System, promptOutcomes) {
 			return "", boom
 		}
 		return summarizeAll(req)
@@ -316,7 +322,7 @@ func (m *cachedThenFailing) Complete(_ context.Context, req ports.ModelRequest) 
 
 func TestMalformedOutcomesAreDroppedAndReported(t *testing.T) {
 	m := &fakeModel{answer: func(req ports.ModelRequest) (string, error) {
-		if req.System == promptOutcomes {
+		if strings.HasPrefix(req.System, promptOutcomes) {
 			return `{"overview":" Sum. ","outcomes":[
 				{"op":"EXPLODE","title":"bad op","node_ids":["file:a.txt"]},
 				{"op":"ADD","title":"  ","node_ids":["file:a.txt"]},
@@ -339,7 +345,7 @@ func TestMalformedOutcomesAreDroppedAndReported(t *testing.T) {
 	}
 
 	unusable := &fakeModel{answer: func(req ports.ModelRequest) (string, error) {
-		if req.System == promptOutcomes {
+		if strings.HasPrefix(req.System, promptOutcomes) {
 			return `{broken`, nil
 		}
 		return summarizeAll(req)
@@ -352,7 +358,7 @@ func TestMalformedOutcomesAreDroppedAndReported(t *testing.T) {
 
 func TestOutcomeCallIsReservedWithinTheLimit(t *testing.T) {
 	m := &fakeModel{answer: func(req ports.ModelRequest) (string, error) {
-		if req.System == promptOutcomes {
+		if strings.HasPrefix(req.System, promptOutcomes) {
 			return `{"overview":"o","outcomes":[]}`, nil
 		}
 		return summarizeAll(req)

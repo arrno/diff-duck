@@ -43,6 +43,19 @@ func (s *Source) Variant() string { return s.variant }
 
 // Load returns the prompt in <name>.md and its content hash.
 func (s *Source) Load(name string) (string, domain.PromptInfo, error) {
+	return s.read(name)
+}
+
+// LoadReadingLevel returns the instruction in reading-levels/<level>.md and its content hash.
+// Only a level that passes domain validation names a file (K3).
+func (s *Source) LoadReadingLevel(level domain.ReadingLevel) (string, domain.PromptInfo, error) {
+	if !level.Valid() {
+		return "", domain.PromptInfo{}, domain.ErrUnknownReadingLevel
+	}
+	return s.read("reading-levels/" + string(level))
+}
+
+func (s *Source) read(name string) (string, domain.PromptInfo, error) {
 	data, err := fs.ReadFile(s.files, name+".md")
 	if err != nil {
 		return "", domain.PromptInfo{}, fmt.Errorf("prompt variant %q: %w", s.variant, err)

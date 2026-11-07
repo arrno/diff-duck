@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/arrno/diff-duck/internal/domain"
@@ -25,6 +26,11 @@ type CompressRequest struct {
 	MaxModelCalls int
 	// Progress, when set, receives a plain description of each stage as it starts.
 	Progress func(stage string)
+	// ReadingLevel is how plainly the model writes. It is required unless the run is
+	// structure only.
+	ReadingLevel domain.ReadingLevel
+	// Provider is recorded with the run; it is empty for a model no person can choose.
+	Provider domain.ModelProvider
 }
 
 func (r CompressRequest) report(stage string) {
@@ -61,7 +67,7 @@ func (c *DiffCompressor) Compress(ctx context.Context, req CompressRequest) (*do
 			return nil, errors.New("a model and prompts are required unless the run is structure only")
 		}
 		var err error
-		system, infos, err = c.loadPrompts()
+		system, infos, err = c.loadPrompts(req.ReadingLevel)
 		if err != nil {
 			return nil, err
 		}
@@ -157,6 +163,8 @@ func (c *DiffCompressor) Compress(ctx context.Context, req CompressRequest) (*do
 		stats := runner.stats
 		stats.Model, stats.PromptVariant, stats.Prompts = result.Generation.Model, result.Generation.PromptVariant, infos
 		result.Generation = stats
+		// Set after the swap above, which would otherwise drop them.
+		result.Generation.Provider, result.Generation.ReadingLevel = req.Provider, req.ReadingLevel
 	}
 	result.Generation.Duration = c.now().Sub(started)
 	result.Metrics = measure(result, changes)
@@ -171,7 +179,16 @@ func (c *DiffCompressor) Compress(ctx context.Context, req CompressRequest) (*do
 	return result, nil
 }
 
-func (c *DiffCompressor) loadPrompts() (map[string]string, []domain.PromptInfo, error) {
+// loadPrompts returns every system prompt with the reading level's instruction appended, so
+// the level is part of each prompt and therefore of each cached answer's identity (K3).
+func (c *DiffCompressor) loadPrompts(level domain.ReadingLevel) (map[string]string, []domain.PromptInfo, error) {
+	if _, err := domain.ParseReadingLevel(string(level)); err != nil {
+		return nil, nil, err
+	}
+	instruction, levelInfo, err := c.prompts.LoadReadingLevel(level)
+	if err != nil {
+		return nil, nil, err
+	}
 	system := map[string]string{}
 	var infos []domain.PromptInfo
 	for _, name := range []string{promptLeaf, promptParent, promptOutcomes} {
@@ -179,10 +196,10 @@ func (c *DiffCompressor) loadPrompts() (map[string]string, []domain.PromptInfo, 
 		if err != nil {
 			return nil, nil, err
 		}
-		system[name] = text
+		system[name] = strings.TrimRight(text, "\n") + "\n\n" + instruction
 		infos = append(infos, info)
 	}
-	return system, infos, nil
+	return system, append(infos, levelInfo), nil
 }
 
 func measure(result *domain.CompressedDiff, changes []domain.FileChange) domain.Metrics {

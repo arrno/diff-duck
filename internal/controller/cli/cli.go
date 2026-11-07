@@ -14,10 +14,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/arrno/diff-duck/internal/adapters/anthropicapi"
-	"github.com/arrno/diff-duck/internal/adapters/claudecli"
 	"github.com/arrno/diff-duck/internal/adapters/gitrepo"
-	"github.com/arrno/diff-duck/internal/adapters/modelcache"
 	"github.com/arrno/diff-duck/internal/adapters/promptfiles"
 	"github.com/arrno/diff-duck/internal/controller/htmlview"
 	"github.com/arrno/diff-duck/internal/domain"
@@ -79,6 +76,7 @@ type options struct {
 	cacheDir      string
 	structureOnly bool
 	maxModelCalls int
+	readingLevel  string
 }
 
 // Run executes the command and returns its exit code.
@@ -93,6 +91,7 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	fs.StringVar(&opts.out, "out", "", "output directory (default: ./diff-duck-out/<base>..<head>)")
 	fs.BoolVar(&opts.structureOnly, "structure-only", false, "skip the model and output only structural facts")
+	fs.StringVar(&opts.readingLevel, "reading-level", string(domain.ReadingSixthGrade), "how plainly summaries are written: 2nd-grade, 6th-grade, high-school, college, or phd")
 	addModelFlags(fs, &opts)
 	fs.Usage = func() {
 		fmt.Fprint(stderr, usage)
@@ -112,8 +111,13 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "error: --concurrency must be at least 1")
 		return exitUsage
 	}
+	level, err := domain.ParseReadingLevel(opts.readingLevel)
+	if err != nil {
+		fmt.Fprintln(stderr, "error: --reading-level:", err)
+		return exitUsage
+	}
 
-	if err := execute(ctx, opts, positional[0], positional[1], positional[2], stdout); err != nil {
+	if err := execute(ctx, opts, level, positional[0], positional[1], positional[2], stdout); err != nil {
 		fmt.Fprintln(stderr, "error:", printable(err.Error()))
 		if errors.Is(err, services.ErrNoExplanations) {
 			return exitNoSummaries
@@ -125,32 +129,31 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 
 // addModelFlags registers the settings shared by every way of generating a diff.
 func addModelFlags(fs *flag.FlagSet, opts *options) {
-	fs.StringVar(&opts.adapter, "adapter", "claude-cli", "model adapter: claude-cli or anthropic-api")
-	fs.StringVar(&opts.model, "model", "claude-sonnet-5-5", "model ID")
-	fs.StringVar(&opts.effort, "effort", "medium", "model effort: low, medium, high, xhigh, or max")
-	fs.StringVar(&opts.promptsDir, "prompts", "", "prompt variant directory holding leaf.md, parent.md, outcomes.md (default: built in)")
+	fs.StringVar(&opts.adapter, "adapter", adapterClaudeCLI, "model adapter: "+adapterNames)
+	fs.StringVar(&opts.model, "model", "", "model ID for the --adapter provider only (default: that provider's default model)")
+	fs.StringVar(&opts.effort, "effort", "medium", "model effort for every provider: low, medium, high, xhigh, or max")
+	fs.StringVar(&opts.promptsDir, "prompts", "", "prompt variant directory holding leaf.md, parent.md, outcomes.md, and reading-levels/<level>.md (default: built in)")
 	fs.IntVar(&opts.concurrency, "concurrency", 4, "maximum concurrent model calls")
 	fs.BoolVar(&opts.noCache, "no-cache", false, "ignore and do not write the model response cache")
 	fs.StringVar(&opts.cacheDir, "cache-dir", "", "model response cache directory (default: the user cache directory)")
 	fs.IntVar(&opts.maxModelCalls, "max-model-calls", 200, "most model calls in one run, leaving the rest visibly unexplained; 0 means no limit")
 }
 
-func execute(ctx context.Context, opts options, target, base, head string, stdout io.Writer) error {
+func execute(ctx context.Context, opts options, level domain.ReadingLevel, target, base, head string, stdout io.Writer) error {
 	repo, err := gitrepo.Open(ctx, target)
 	if err != nil {
 		return err
 	}
 	defer repo.Close()
 
-	var model ports.LanguageModel
+	var opened ports.OpenedModel
 	var source ports.PromptSource
 	if !opts.structureOnly {
-		var closeModel func()
-		model, closeModel, err = buildModel(opts)
+		opened, err = openAdapter(opts)
 		if err != nil {
 			return err
 		}
-		defer closeModel()
+		defer opened.Close()
 		if source, err = buildPrompts(opts); err != nil {
 			return err
 		}
@@ -162,13 +165,15 @@ func execute(ctx context.Context, opts options, target, base, head string, stdou
 	}
 	defer closeAnalyzers()
 	differ := services.NewStructuralDiffer(repo, analyzers...)
-	compressor := services.NewDiffCompressor(repo, differ, model, source, opts.concurrency)
+	compressor := services.NewDiffCompressor(repo, differ, opened.Model, source, opts.concurrency)
 	result, compressErr := compressor.Compress(ctx, services.CompressRequest{
 		Repository:    target,
 		Base:          base,
 		Head:          head,
 		StructureOnly: opts.structureOnly,
 		MaxModelCalls: opts.maxModelCalls,
+		ReadingLevel:  level,
+		Provider:      opened.Provider,
 	})
 	if result == nil {
 		return compressErr
@@ -188,43 +193,6 @@ func execute(ctx context.Context, opts options, target, base, head string, stdou
 	}
 	report(stdout, dir, result)
 	return compressErr
-}
-
-func buildModel(opts options) (ports.LanguageModel, func(), error) {
-	closeModel := func() {}
-	var model ports.LanguageModel
-	switch {
-	case opts.adapter == "claude-cli":
-		m, err := claudecli.New("", opts.model, opts.effort)
-		if err != nil {
-			return nil, nil, err
-		}
-		model, closeModel = m, m.Close
-	case opts.adapter == "anthropic-api":
-		model = anthropicapi.New(opts.model, opts.effort)
-	default:
-		m, err := verificationModel(opts.adapter)
-		if err != nil {
-			return nil, nil, err
-		}
-		model = m
-	}
-	if opts.noCache {
-		return model, closeModel, nil
-	}
-	dir := opts.cacheDir
-	if dir == "" {
-		base, err := os.UserCacheDir()
-		if err != nil {
-			return nil, nil, fmt.Errorf("locate cache directory (use --cache-dir or --no-cache): %w", err)
-		}
-		dir = filepath.Join(base, "diff-duck", "responses")
-	}
-	cached, err := modelcache.New(model, dir)
-	if err != nil {
-		return nil, nil, err
-	}
-	return cached, closeModel, nil
 }
 
 func buildPrompts(opts options) (ports.PromptSource, error) {

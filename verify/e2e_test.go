@@ -381,6 +381,9 @@ func TestA11PromptVariantsAreInjectedAndRecorded(t *testing.T) {
 	for _, name := range []string{"leaf", "parent", "outcomes"} {
 		must(os.WriteFile(filepath.Join(dir, name+".md"), []byte("Variant prompt for "+name), 0o644))
 	}
+	// A variant carries its own reading-level instructions (K3).
+	must(os.MkdirAll(filepath.Join(dir, "reading-levels"), 0o755))
+	must(os.WriteFile(filepath.Join(dir, "reading-levels", "6th-grade.md"), []byte("Variant level"), 0o644))
 	variant := normal(t, "--prompts", dir)
 	if variant.diff.Generation.PromptVariant != "terse-v2" || builtIn.diff.Generation.PromptVariant != "default" {
 		t.Fatalf("variants: %q %q", variant.diff.Generation.PromptVariant, builtIn.diff.Generation.PromptVariant)
@@ -415,9 +418,30 @@ func TestCacheAvoidsRepeatCallsAndNeverCrossesVariants(t *testing.T) {
 	for _, name := range []string{"leaf", "parent", "outcomes"} {
 		must(os.WriteFile(filepath.Join(dir, name+".md"), []byte("x"), 0o644))
 	}
+	must(os.MkdirAll(filepath.Join(dir, "reading-levels"), 0o755))
+	must(os.WriteFile(filepath.Join(dir, "reading-levels", "6th-grade.md"), []byte("x"), 0o644))
 	third := execute(t, append([]string{"--prompts", dir}, flags...)...)
-	if third.diff.Generation.CacheHits != 0 {
-		t.Fatalf("a different prompt must not reuse answers: %+v", third.diff.Generation)
+	if third.code != 0 || third.diff.Generation.CacheHits != 0 {
+		t.Fatalf("a different prompt must not reuse answers: %d %+v", third.code, third.diff.Generation)
+	}
+}
+
+func TestB6ReadingLevelIsRecordedAndChangesTheCacheIdentity(t *testing.T) {
+	cache := t.TempDir()
+	flags := []string{"--adapter", "scripted:normal", "--cache-dir", cache, fixture, "base", "head"}
+	first := execute(t, flags...)
+	if g := first.diff.Generation; first.code != 0 || g.ReadingLevel != domain.ReadingSixthGrade || g.Provider != "" {
+		t.Fatalf("default level, and no provider for a verification adapter: %d %+v", first.code, g)
+	}
+	phd := execute(t, append([]string{"--reading-level", "phd"}, flags...)...)
+	if g := phd.diff.Generation; phd.code != 0 || g.ReadingLevel != domain.ReadingPhD || g.CacheHits != 0 || g.ModelCalls == 0 {
+		t.Fatalf("an answer written at one level must never be served for another: %d %+v", phd.code, g)
+	}
+	if names := phd.diff.Generation.Prompts; len(names) != 4 || names[3].Name != "reading-levels/phd" {
+		t.Fatalf("the level's prompt must be recorded: %+v", names)
+	}
+	if bad := execute(t, append([]string{"--reading-level", "../leaf"}, flags...)...); bad.code != 2 {
+		t.Fatalf("an unknown level is a usage error: %d", bad.code)
 	}
 }
 

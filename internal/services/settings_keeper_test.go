@@ -399,3 +399,30 @@ func TestKeyFormatBoundaries(t *testing.T) {
 		}
 	}
 }
+
+func TestWhilePinnedTheReadingLevelCanBeSavedForAnyProvider(t *testing.T) {
+	store := &settingsStore{}
+	secrets := newSecretStore()
+	k := NewSettingsKeeper(SettingsDeps{Store: store, Secrets: secrets, Availability: availability{}, Pinned: "scripted:normal"})
+	// Unavailable, and an API provider with no key: runs use the pinned adapter, so both save.
+	for _, p := range []string{"codex", "openai-api"} {
+		view, err := k.Save(context.Background(), p, "phd", "")
+		if err != nil || view.Provider != domain.ModelProvider(p) || view.ReadingLevel != domain.ReadingPhD || view.Pinned != "scripted:normal" {
+			t.Fatalf("%s: %v %+v", p, err, view)
+		}
+	}
+	// A given key is still saved, and still checked.
+	if _, err := k.Save(context.Background(), "anthropic-api", "college", testKey); err != nil || secrets.keys[domain.ProviderAnthropicAPI] != testKey {
+		t.Fatalf("key while pinned: %v", err)
+	}
+	if _, err := k.Save(context.Background(), "anthropic-api", "college", "bad key"); !errors.Is(err, ErrInvalidSettings) {
+		t.Errorf("malformed key while pinned: %v", err)
+	}
+	// Unknown values and a key for a CLI provider are still rejected.
+	if _, err := k.Save(context.Background(), "codex", "phd", testKey); !errors.Is(err, ErrInvalidSettings) {
+		t.Errorf("key for a CLI provider: %v", err)
+	}
+	if _, err := k.Save(context.Background(), "google", "phd", ""); !errors.Is(err, ErrInvalidSettings) {
+		t.Errorf("unknown provider: %v", err)
+	}
+}

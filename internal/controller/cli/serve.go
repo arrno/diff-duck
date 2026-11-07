@@ -101,11 +101,19 @@ func serve(ctx context.Context, opts serveOptions, stdout io.Writer) error {
 	}
 	defer store.Close()
 
-	model, closeModel, err := buildModel(opts.options)
-	if err != nil {
-		return err
+	// One keychain and one availability check for the whole process, shared by the settings
+	// and by model building.
+	keys := secretStore()
+	available := installedProviders{}
+	models := modelOpener{opts: opts.options, pinned: opts.pinned != "", keys: keys, available: available}
+	if models.pinned {
+		// A pinned adapter that cannot work fails now rather than on every diff.
+		check, err := openAdapter(opts.options)
+		if err != nil {
+			return err
+		}
+		check.Close()
 	}
-	defer closeModel()
 	prompts, err := buildPrompts(opts.options)
 	if err != nil {
 		return err
@@ -120,22 +128,21 @@ func serve(ctx context.Context, opts serveOptions, stdout io.Writer) error {
 	}
 	defer closeAnalyzers()
 
+	settings := services.NewSettingsKeeper(services.SettingsDeps{
+		Store:        store,
+		Secrets:      keys,
+		Availability: available,
+		Pinned:       opts.pinned,
+	})
 	library := services.NewDiffLibrary(services.LibraryDeps{
 		Store:         store,
 		Repositories:  gitrepo.Source{},
 		Analyzers:     analyzers,
-		Model:         model,
+		Models:        models,
+		Settings:      settings,
 		Prompts:       prompts,
 		Concurrency:   opts.concurrency,
 		MaxModelCalls: opts.maxModelCalls,
-	})
-	// One keychain for the whole process: S5 shares it as the KeySource for model building.
-	keys := secretStore()
-	settings := services.NewSettingsKeeper(services.SettingsDeps{
-		Store:        store,
-		Secrets:      keys,
-		Availability: newPathAvailability(),
-		Pinned:       opts.pinned,
 	})
 	if err := library.Recover(ctx); err != nil {
 		return err
