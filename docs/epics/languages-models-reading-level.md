@@ -41,8 +41,8 @@ levels), `ModelSettings` (provider + reading level), plus the existing `Generati
 ### Invariants
 
 - **K1** An API key never reaches SQLite, logs, error messages, the response cache key, HTTP
-  responses, or the browser after it is submitted. It lives only in the OS keychain and in
-  process memory while a model is built from it.
+  responses, or the browser after it is submitted. It lives only in the OS keychain and,
+  transiently, in process memory (building a model, or checking a key exists).
 - **K2** Analyzed code cannot trigger tool use in any provider (extends A12). Where a provider
   cannot fully disable tools (Codex), it runs read-only, sandboxed, with approvals never
   requested, in an empty scratch directory, and the residual risk is documented.
@@ -153,3 +153,15 @@ provider with no key saved and none given is a 400.
 - **For S5 (K3):** load reading-level Markdown and build cache identity only from a level that
   passed `domain.ParseReadingLevel`, never a raw string (path traversal).
 - **For S6:** the viewer's TS `Generation` type needs `provider` and `readingLevel`.
+
+- **S4 done** (merged). Ports: `SettingsStore`, `SecretStore`, `KeySource` (LoadKey, only for
+  model construction), `ProviderAvailability`. Service `SettingsKeeper`: `Settings`, `Current`,
+  `Save(provider, level, apiKey)`, `ClearKey(provider)`; errors `ErrInvalidSettings`,
+  `ErrProviderUnavailable`, `ErrKeyRequired` (all -> 400). `SettingsView` JSON matches the API
+  contract. Keychain adapter: `keyring.New()` implements SecretStore and KeySource.
+- **For S5:** compose `keyring.New()` as KeySource for model building; implement
+  `ProviderAvailability` once and share it with ModelOpener (no second availability method);
+  call `SettingsKeeper.Settings` at run start. A selected API provider whose key was cleared
+  must fail the run with a clear "no API key saved" error (`ports.ErrKeyNotSaved`).
+- **For S6:** never log or echo request bodies; `http.MaxBytesReader` on PUT; Host/Origin checks
+  on PUT and DELETE; saving while pinned is allowed (the pin only overrides the provider).
