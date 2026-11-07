@@ -278,3 +278,13 @@ the real OS keychain; `make verify` uses the mock. Recorded as a known limitatio
   real reason is the platform; with a pin to the same API provider as the saved one, the key field
   saves to the keychain while pinned runs use the env key; the non-Unix Codex test is compile-only
   (no Windows CI).
+- **F1 done** (merged): per-Build lazy package lookup, analyzing each file at most once (K=200
+  repro: 182 s -> 1.2 s); container leaves explained from their own code with members elided
+  (`own_source.go`); Java enum-constant bodies yield method units; one shared qualified-name budget
+  for every language, C# namespaces included; tests for differ cancellation, ENUM_MEMBER
+  structural, and the same-side tie-break; the Rust linear-time test measures growth ratio.
+- **Known limitations (accepted, pre-existing):** `paintOwners` costs nesting depth × lines (a 305 KB
+  file with 300 nested classes takes about 35 s); budgets are per file, with no total per diff
+  (a 1.9 MB C# file can still produce about 236 MB of output).
+
+All integrated-review findings are resolved or recorded. `make verify`: VERIFIED (39 Playwright).
