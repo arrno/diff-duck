@@ -109,15 +109,15 @@ func TestCSharpChangesBecomeCodeUnits(t *testing.T) {
 	wants := map[string]want{
 		"Repo.Find(int)":         {domain.KindMethod, domain.OpChange, "src/Store > Repo > Repo.Find(int)", 10, 14, true},
 		"Repo.Find(Guid)":        {domain.KindMethod, domain.OpAdd, "src/Store > Repo > Repo.Find(Guid)", 18, 18, true},
-		"Repo.Obsolete":          {domain.KindMethod, domain.OpRemove, "src/Store > Repo > Repo.Obsolete", 18, 20, true},
+		"Repo.Obsolete()":        {domain.KindMethod, domain.OpRemove, "src/Store > Repo > Repo.Obsolete()", 18, 20, true},
 		"Repo.Cache":             {domain.KindClass, domain.OpChange, "src/Store > Repo > Repo.Cache", 20, 23, false},
-		"Repo.Cache.Clear":       {domain.KindMethod, domain.OpChange, "src/Store > Repo > Repo.Cache > Repo.Cache.Clear", 22, 22, true},
-		"Repo.SaveAll":           {domain.KindMethod, domain.OpAdd, "src/Store > Repo > Repo.SaveAll", 7, 7, true},
+		"Repo.Cache.Clear()":     {domain.KindMethod, domain.OpChange, "src/Store > Repo > Repo.Cache > Repo.Cache.Clear()", 22, 22, true},
+		"Repo.SaveAll()":         {domain.KindMethod, domain.OpAdd, "src/Store > Repo > Repo.SaveAll()", 7, 7, true},
 		"Status":                 {domain.KindEnum, domain.OpChange, "src/Store > Status", 26, 30, false},
 		"Status.Archived":        {domain.KindEnumMember, domain.OpAdd, "src/Store > Status > Status.Archived", 29, 29, true},
 		"<top-level statements>": {domain.KindFunction, domain.OpChange, ". > <top-level statements>", 1, 1, true},
 		"RepoTests":              {domain.KindClass, domain.OpAdd, "tests > RepoTests", 3, 7, true},
-		"RepoTests.Finds":        {domain.KindMethod, domain.OpAdd, "tests > RepoTests > RepoTests.Finds", 5, 6, true},
+		"RepoTests.Finds()":      {domain.KindMethod, domain.OpAdd, "tests > RepoTests > RepoTests.Finds()", 5, 6, true},
 	}
 	for name, w := range wants {
 		nodes := allNamed(r, name)
@@ -137,12 +137,12 @@ func TestCSharpChangesBecomeCodeUnits(t *testing.T) {
 				name, n.Kind, n.Op, gotPath, loc.StartLine, loc.EndLine, n.Direct, w.kind, w.op, w.path, w.start, w.end, w.direct)
 		}
 	}
-	for _, name := range []string{"Repo.Find(string)", "Repo.Save", "Repo.Count", "Status.Active"} {
+	for _, name := range []string{"Repo.Find(string)", "Repo.Save()", "Repo.Count", "Status.Active"} {
 		if n := allNamed(r, name); len(n) != 0 {
 			t.Errorf("unchanged %s must not appear: %+v", name, n)
 		}
 	}
-	if n := allNamed(r, "RepoTests.Finds"); len(n) == 1 && !n[0].Test {
+	if n := allNamed(r, "RepoTests.Finds()"); len(n) == 1 && !n[0].Test {
 		t.Error("a test file's units are tests")
 	}
 
@@ -187,6 +187,26 @@ func TestCSharpChangesBecomeCodeUnits(t *testing.T) {
 	}
 }
 
+// A file can declare several namespaces. Each is its own package, and one that existed before
+// is not reported as added or removed because a class inside it was.
+func TestCSharpSecondNamespaceInAFileIsNotAPackageAddition(t *testing.T) {
+	base := "namespace A { class X { } }\nnamespace B { class Y { } }\n"
+	s := repo(t,
+		map[string]string{"src/Lib/Two.cs": base},
+		map[string]string{"src/Lib/Two.cs": base + "namespace B { class Z { } }\n"},
+	)
+	r := structure(t, s)
+	checkTotals(t, s, r)
+	z := allNamed(r, "Z")
+	if len(z) != 1 || z[0].Op != domain.OpAdd {
+		t.Fatalf("the added class: %+v", z)
+	}
+	pkg := r.parent[z[0].ID]
+	if pkg == nil || pkg.Kind != domain.KindPackage || pkg.Signature != "package B" || pkg.Op != domain.OpChange {
+		t.Fatalf("namespace B existed before; its package is changed, not added: %+v", pkg)
+	}
+}
+
 func TestCSharpMethodRenameIsRecognized(t *testing.T) {
 	body := "    {\n        var total = 0;\n        foreach (var x in items) total += x;\n        return total;\n    }\n"
 	s := repo(t,
@@ -195,11 +215,11 @@ func TestCSharpMethodRenameIsRecognized(t *testing.T) {
 	)
 	r := structure(t, s)
 	checkTotals(t, s, r)
-	n := allNamed(r, "Cart.Total")
-	if len(n) != 1 || n[0].Op != domain.OpChange || n[0].PreviousName != "Cart.Sum" {
+	n := allNamed(r, "Cart.Total()")
+	if len(n) != 1 || n[0].Op != domain.OpChange || n[0].PreviousName != "Cart.Sum()" {
 		t.Fatalf("a renamed method with an identical body keeps its identity: %+v", n)
 	}
-	if len(allNamed(r, "Cart.Sum")) != 0 {
+	if len(allNamed(r, "Cart.Sum()")) != 0 {
 		t.Error("the old name must not also appear as removed")
 	}
 }
