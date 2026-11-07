@@ -297,6 +297,9 @@ func (e *csExtractor) typeDecl(d csDecl, ns, scope, name string) {
 func (e *csExtractor) enumMembers(body Node, ns, enum string, owned map[Node]bool) {
 	from, offset := "start", 0
 	for _, d := range csFlatten(body, nil) {
+		if e.stopped() {
+			break
+		}
 		n := d.node
 		if n.Type() != "enum_member_declaration" || e.nameBytes < 0 {
 			continue

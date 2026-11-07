@@ -378,10 +378,13 @@ func (b *treeBuilder) detectRenames(changed []*keyedUnit) []*keyedUnit {
 		n.PreviousName = old.Name
 		text := fmt.Sprintf("Renamed from %s with an identical body.", old.Name)
 		if old.Package != cur.Package {
-			from := movedFrom(old.Package, cur.Package)
 			n.Moved = true
-			n.PreviousName = from + "." + old.Name
-			text = fmt.Sprintf("Moved from package %s with an identical body.", from)
+			if from := movedFrom(old.Package, cur.Package); from != "" {
+				n.PreviousName = from + "." + old.Name
+				text = fmt.Sprintf("Moved from package %s with an identical body.", from)
+			} else {
+				text = "Moved from the unnamed package with an identical body."
+			}
 			if old.Name != cur.Name {
 				text = fmt.Sprintf("Moved and renamed from %s with an identical body.", n.PreviousName)
 			}
@@ -405,8 +408,10 @@ func (b *treeBuilder) detectRenames(changed []*keyedUnit) []*keyedUnit {
 
 // movedFrom names the package a unit left: its directory, or, when the unit stayed in the same
 // directory and only its declared package changed (a C# namespace, say), that package's name.
+// It is empty when that package has no name, such as C#'s global namespace or Java's default
+// package at the repository root.
 func movedFrom(old, cur domain.PackageRef) string {
-	if old.Dir == cur.Dir && old.Name != "" {
+	if old.Dir == cur.Dir {
 		return old.Name
 	}
 	return old.Dir

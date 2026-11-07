@@ -87,6 +87,30 @@ func flat(lang string, n int) string {
 	return b.String()
 }
 
+// members returns a file of one container holding n members.
+func members(lang string, n int) string {
+	var b strings.Builder
+	open, member, closing := "", "", ""
+	switch lang {
+	case "python":
+		open, member = "class C:\n", "    def f%d(self):\n        return %d\n"
+	case "typescript":
+		open, member, closing = "class C {\n", "f%d() { return %d; }\n", "}\n"
+	case "rust":
+		open, member, closing = "impl S {\n", "fn f%d() -> u32 { %d }\n", "}\n"
+	case "csharp":
+		open, member, closing = "enum E {\n", "A%d = %d,\n", "}\n"
+	case "java":
+		open, member, closing = "class C {\n", "int f%d() { return %d; }\n", "}\n"
+	}
+	b.WriteString(open)
+	for i := range n {
+		fmt.Fprintf(&b, member, i, i)
+	}
+	b.WriteString(closing)
+	return b.String()
+}
+
 // Every unit's code is a slice of one copy of the file. Deeply nested declarations, each of
 // which spans nearly the whole file, must not copy it once per level: 500 nested Python classes
 // around a 1 MiB literal once allocated more than 500 MB.
@@ -122,7 +146,7 @@ func TestNestedDeclarationsShareOneCopyOfTheFile(t *testing.T) {
 					spanning++
 				}
 				if u.Source == "" {
-					continue
+					t.Fatalf("%s %s has no code", u.Kind, u.Name)
 				}
 				p := uintptr(unsafe.Pointer(unsafe.StringData(u.Source)))
 				if p < lo || p+uintptr(len(u.Source)) > hi {
@@ -157,25 +181,32 @@ func TestExtractionStopsWhenCancelled(t *testing.T) {
 	rt := newTestRuntime(t)
 	const declarations = 2000
 	for _, lc := range languages {
-		t.Run(lc.name, func(t *testing.T) {
-			tree, err := rt.Parse(context.Background(), lc.grammar, []byte(flat(lc.name, declarations)))
-			if err != nil {
-				t.Fatal(err)
-			}
-			if a, err := lc.extract(context.Background(), tree, lc.path); err != nil || len(a.Units) < declarations {
-				t.Fatalf("uncancelled: %d units, %v", len(a.Units), err)
-			}
-			ctx := &cancelAfter{Context: context.Background(), allowed: 10}
-			a, err := lc.extract(ctx, tree, lc.path)
-			if !errors.Is(err, context.Canceled) || len(a.Units) != 0 {
-				t.Fatalf("want a cancellation error and no units, got %d units, %v", len(a.Units), err)
-			}
-			// Each declaration visited costs one check, so a walk that went on after the
-			// cancellation would check thousands of times.
-			if extra := ctx.calls - ctx.allowed; extra > 10 {
-				t.Errorf("extraction went on for %d checks after it was cancelled", extra)
-			}
-		})
+		for shape, src := range map[string]string{
+			"top-level declarations": flat(lc.name, declarations),
+			"members of one type":    members(lc.name, declarations),
+		} {
+			t.Run(lc.name+"/"+shape, func(t *testing.T) { stopsWhenCancelled(t, rt, lc, src, declarations) })
+		}
+	}
+}
+
+func stopsWhenCancelled(t *testing.T, rt *Runtime, lc languageCase, src string, declarations int) {
+	tree, err := rt.Parse(context.Background(), lc.grammar, []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a, err := lc.extract(context.Background(), tree, lc.path); err != nil || len(a.Units) < declarations {
+		t.Fatalf("uncancelled: %d units, %v", len(a.Units), err)
+	}
+	ctx := &cancelAfter{Context: context.Background(), allowed: 10}
+	a, err := lc.extract(ctx, tree, lc.path)
+	if !errors.Is(err, context.Canceled) || len(a.Units) != 0 {
+		t.Fatalf("want a cancellation error and no units, got %d units, %v", len(a.Units), err)
+	}
+	// Each declaration visited costs one check, so a walk that went on after the
+	// cancellation would check thousands of times.
+	if extra := ctx.calls - ctx.allowed; extra > 10 {
+		t.Errorf("extraction went on for %d checks after it was cancelled", extra)
 	}
 }
 
@@ -220,5 +251,42 @@ func TestTextUntilAndNextSibling(t *testing.T) {
 	}
 	if second.TextUntil(first.StartByte()) != "" || first.TextUntil(len(tree.Text())+1) != "" || (Node{}).TextUntil(1) != "" {
 		t.Error("a range that ends before its start or past the file is empty")
+	}
+	if got := second.TextUntil(len(tree.Text())); got != "b = 2\n" {
+		t.Errorf("a range may end exactly at the end of the file: %q", got)
+	}
+}
+
+func TestCompactMakesOneBoundedLine(t *testing.T) {
+	long := strings.TrimSpace(strings.Repeat("ab ", 100)) // one line, single-spaced, 299 bytes
+	for in, want := range map[string]string{
+		"":                       "",
+		"func f(a int) error":    "func f(a int) error",
+		"func  f()":              "func f()",
+		"func\tf()":              "func f()",
+		"func f()\r\n{":          "func f() {",
+		" func f()":              "func f()",
+		"func f() ":              "func f()",
+		"f(é)  x":                "f(é) x",
+		"a b":                    "a b", // a non-ASCII space
+		"a\rb":                   "a b",
+		"a\nb":                   "a b",
+		long:                     long[:240] + "…",
+		strings.Repeat("é", 200): strings.ToValidUTF8(strings.Repeat("é", 200)[:240], "") + "…",
+	} {
+		if got := compact(in); got != want {
+			t.Errorf("compact(%q) = %q, want %q", in, got, want)
+		}
+		if got := compact(compact(in)); got != compact(in) {
+			t.Errorf("compact is not idempotent on %q: %q", in, got)
+		}
+	}
+}
+
+func TestLineCountCountsAFinalLineWithoutANewline(t *testing.T) {
+	for in, want := range map[string]int{"": 1, "a": 1, "a\n": 1, "a\nb": 2, "a\nb\n": 2} {
+		if got := lineCount(in); got != want {
+			t.Errorf("lineCount(%q) = %d, want %d", in, got, want)
+		}
 	}
 }

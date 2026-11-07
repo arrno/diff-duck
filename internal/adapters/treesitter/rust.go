@@ -103,6 +103,9 @@ func extractRust(ctx context.Context, tree *Tree, p string) (domain.FileAnalysis
 	}
 	slot := e.reserve()
 	e.items(root, rsScope{name: module, parent: module, test: e.test}, owned)
+	if e.stopped() { // the module's hash covers the whole file
+		return e.analysis(domain.FileAnalysis{})
+	}
 	e.units[slot] = e.finish(domain.Unit{
 		Kind:      domain.KindModule,
 		Name:      module,
@@ -333,6 +336,9 @@ func (e *rsExtractor) structure(it rsItem, scope rsScope, test bool) {
 	switch body.Type() {
 	case "field_declaration_list":
 		for _, f := range rsLeading(body) {
+			if e.stopped() {
+				break
+			}
 			fname := f.node.ChildByField("name")
 			if f.node.Type() != "field_declaration" || fname.IsNull() {
 				continue
@@ -380,6 +386,9 @@ func (e *rsExtractor) tupleFields(body Node, parent string, test bool, members m
 	var attrs, docs, lead []Node
 	var first Node
 	for _, c := range body.Children() {
+		if e.stopped() {
+			break
+		}
 		switch {
 		case c.IsExtra():
 			if rsIsOuterDoc(c) {
@@ -426,6 +435,9 @@ func (e *rsExtractor) enum(it rsItem, scope rsScope, test bool) {
 	slot := e.reserve()
 	members := map[Node]bool{}
 	for _, v := range rsLeading(body) {
+		if e.stopped() {
+			break
+		}
 		vname := v.node.ChildByField("name")
 		if v.node.Type() != "enum_variant" || vname.IsNull() {
 			continue
@@ -498,6 +510,9 @@ func (e *rsExtractor) impl(it rsItem, scope rsScope, local map[string]bool, test
 // without a body: a trait's required method.
 func (e *rsExtractor) associated(body Node, scope, parent string, test bool, owned map[Node]bool, signatureKind domain.UnitKind) {
 	for _, it := range rsLeading(body) {
+		if e.stopped() {
+			break
+		}
 		t := test || it.test()
 		switch it.node.Type() {
 		case "function_item":

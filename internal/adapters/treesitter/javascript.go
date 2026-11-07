@@ -113,6 +113,9 @@ func extractJS(ctx context.Context, tree *Tree, p string) (domain.FileAnalysis, 
 	owned := map[Node]bool{}
 	slot := e.reserve()
 	e.statements(root, jsScope{prefix: module, parent: module}, owned)
+	if e.stopped() { // the module's hash covers the whole file
+		return e.analysis(domain.FileAnalysis{})
+	}
 	e.units[slot] = e.finish(domain.Unit{
 		Kind:      domain.KindModule,
 		Name:      module,
@@ -307,6 +310,9 @@ func (e *jsExtractor) classBody(body Node, sc jsScope, members map[Node]bool) {
 	var decorators []Node
 	doc := ""
 	for _, c := range body.Children() {
+		if e.stopped() {
+			break
+		}
 		if c.IsExtra() {
 			if len(decorators) == 0 {
 				doc = jsDocComment(c)
@@ -385,6 +391,9 @@ func (e *jsExtractor) iface(outer, s Node, doc string, sc jsScope) {
 	body := s.ChildByField("body")
 	memberDoc := ""
 	for _, c := range body.Children() {
+		if e.stopped() {
+			break
+		}
 		if c.IsExtra() {
 			memberDoc = jsDocComment(c)
 			continue
@@ -431,6 +440,9 @@ func (e *jsExtractor) enum(outer, s Node, doc string, sc jsScope) {
 	previous := ""
 	body := s.ChildByField("body")
 	for _, c := range body.NamedChildren() {
+		if e.stopped() {
+			break
+		}
 		nameNode := c
 		if c.Type() == "enum_assignment" {
 			nameNode = c.ChildByField("name")

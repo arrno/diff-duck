@@ -49,6 +49,9 @@ func extractPython(ctx context.Context, tree *Tree, p string) (domain.FileAnalys
 	owned := map[Node]bool{}
 	slot := e.reserve()
 	e.statements(root, module, false, owned)
+	if e.stopped() { // the module's hash covers the whole file
+		return e.analysis(domain.FileAnalysis{})
+	}
 	e.units[slot] = e.finish(domain.Unit{
 		Kind:      domain.KindModule,
 		Name:      module,

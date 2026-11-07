@@ -126,8 +126,9 @@ func stopCodex(t *testing.T, tc stopCase) (pid int, started bool) {
 	if tc.timesOut {
 		trigger = start.Add(tc.timeout)
 	}
-	// The child sleeps 30s; waiting for it, or for the 2s wait delay, would exceed this.
-	if took := returned.Sub(trigger); took > 1800*time.Millisecond {
+	// The child sleeps 30s; waiting for it, for the 2s wait delay, or for a slow kill would
+	// exceed this. Measured from the trigger, so the stub's start-up time does not count.
+	if took := returned.Sub(trigger); took > time.Second {
 		t.Fatalf("Complete waited %s for a process it should have killed", took)
 	}
 	return pid, true

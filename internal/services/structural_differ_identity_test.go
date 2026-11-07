@@ -78,6 +78,26 @@ func TestMoveBetweenPackagesInOneDirectoryNamesThePackage(t *testing.T) {
 	}
 }
 
+// A unit leaving the root directory's unnamed package (C#'s global namespace) says so, rather
+// than naming the directory "." or a previous name with an empty package.
+func TestMoveOutOfTheUnnamedPackageSaysSo(t *testing.T) {
+	file := func(pkg string) map[string]domain.FileAnalysis {
+		ref := domain.PackageRef{Dir: ".", Name: pkg}
+		return map[string]domain.FileAnalysis{"m.py": {Package: ref, Units: []domain.Unit{{
+			Package: ref, Kind: domain.KindMethod, Name: "Svc.Run()", File: "m.py",
+			StartLine: 1, EndLine: 5, Hash: "h-" + pkg, BodyHash: "body",
+		}}}}
+	}
+	roots, _, err := buildTree(t, context.Background(), file(""), file("Shop"), edit("m.py", 1, 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := findNode(roots, "Svc.Run()")
+	if n == nil || !n.Moved || n.Summary.Text != "Moved from the unnamed package with an identical body." || n.PreviousName != "Svc.Run()" {
+		t.Fatalf("move out of the unnamed package: %+v", n)
+	}
+}
+
 // A move between directories still names the directory the unit left.
 func TestMoveBetweenDirectoriesNamesTheDirectory(t *testing.T) {
 	side := func(dir string) map[string]domain.FileAnalysis {
