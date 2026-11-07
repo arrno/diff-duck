@@ -1,4 +1,4 @@
-// Package keyring implements ports.SecretStore with the OS keychain (macOS Keychain, Windows
+// Package keyring implements ports.SecretStore and ports.KeySource with the OS keychain (macOS Keychain, Windows
 // Credential Manager, or the Secret Service on Linux) through go-keyring, which needs no cgo.
 //
 // K1: a key is passed to the keychain and returned from it, and nowhere else. Errors from
@@ -19,8 +19,9 @@ import (
 const Service = "diff-duck"
 
 var (
-	errSave = errors.New("could not save the API key to the OS keychain")
-	errRead = errors.New("could not read the OS keychain")
+	errSave  = errors.New("could not save the API key to the OS keychain")
+	errRead  = errors.New("could not read the OS keychain")
+	errClear = errors.New("could not clear the API key from the OS keychain")
 )
 
 // Keychain stores one API key per model provider, using the provider ID as the account name.
@@ -75,7 +76,8 @@ func (k *Keychain) LoadKey(provider domain.ModelProvider) (string, error) {
 	return key, nil
 }
 
-// HasKey reports whether a key is saved for the provider.
+// HasKey reports whether a key is saved for the provider. go-keyring has no lookup that skips
+// the secret, so the key is read and dropped at once; it is never returned or kept.
 func (k *Keychain) HasKey(provider domain.ModelProvider) (bool, error) {
 	_, err := k.LoadKey(provider)
 	if errors.Is(err, ports.ErrKeyNotSaved) {
@@ -91,7 +93,7 @@ func (k *Keychain) ClearKey(provider domain.ModelProvider) error {
 		return err
 	}
 	if err := gokeyring.Delete(k.service, user); err != nil && !errors.Is(err, gokeyring.ErrNotFound) {
-		return fmt.Errorf("could not clear the API key from the OS keychain: %w", err)
+		return errClear
 	}
 	return nil
 }

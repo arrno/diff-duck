@@ -119,19 +119,26 @@ var (
 	ErrSavedSettingsInvalid = errors.New("saved settings are not valid")
 )
 
-// SecretStore keeps one API key per model provider in the OS keychain.
+// SecretStore keeps one API key per model provider in the OS keychain. It never hands a key
+// back; KeySource does, for model construction only.
 //
 // K1: a key lives only in the keychain and in process memory while a model is built from it.
-// Implementations must never write a key anywhere else or include it in an error.
+// Implementations must never write a key anywhere else or include it in an error. They reject
+// providers that do not use a key (domain.ModelProvider.NeedsKey).
 type SecretStore interface {
 	// SaveKey stores the provider's key, replacing any saved one.
 	SaveKey(provider domain.ModelProvider, key string) error
 	// HasKey reports whether a key is saved for the provider.
 	HasKey(provider domain.ModelProvider) (bool, error)
-	// LoadKey returns the provider's key, or ErrKeyNotSaved. Only model construction may call it.
-	LoadKey(provider domain.ModelProvider) (string, error)
 	// ClearKey removes the provider's key. Clearing a key that is not saved is not an error.
 	ClearKey(provider domain.ModelProvider) error
+}
+
+// KeySource reads a saved API key so a model can be built from it. Only model construction
+// depends on it, and the key must not outlive that use (K1).
+type KeySource interface {
+	// LoadKey returns the provider's key, or ErrKeyNotSaved.
+	LoadKey(provider domain.ModelProvider) (string, error)
 }
 
 // ErrKeyNotSaved means no API key is saved for the provider.

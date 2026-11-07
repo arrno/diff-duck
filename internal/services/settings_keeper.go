@@ -20,7 +20,8 @@ var (
 	ErrKeyRequired = errors.New("an API key is required")
 )
 
-// maxKeyBytes keeps a key well inside every OS keychain's size limit.
+// maxKeyBytes keeps a key well inside every OS keychain's size limit. Keep it: go-keyring on
+// macOS leaves a `security` process behind when a key exceeds its limit.
 const maxKeyBytes = 1024
 
 // SettingsDeps are what a SettingsKeeper needs from the outside world.
@@ -76,7 +77,9 @@ func (k *SettingsKeeper) Settings(ctx context.Context) (domain.ModelSettings, er
 	return settings, nil
 }
 
-// Current returns the effective settings and the state of every provider.
+// Current returns the effective settings and the state of every provider. A keychain that
+// cannot be read reports no key saved rather than failing, so the CLI providers stay usable
+// on a machine without a working keychain; saving a key there still fails with the reason.
 func (k *SettingsKeeper) Current(ctx context.Context) (SettingsView, error) {
 	settings, err := k.Settings(ctx)
 	if err != nil {
@@ -86,9 +89,8 @@ func (k *SettingsKeeper) Current(ctx context.Context) (SettingsView, error) {
 	for _, p := range domain.ModelProviders() {
 		status := ProviderStatus{ID: p, Label: p.Label(), Available: k.deps.Availability.Available(p), NeedsKey: p.NeedsKey()}
 		if p.NeedsKey() {
-			if status.KeySaved, err = k.deps.Secrets.HasKey(p); err != nil {
-				return SettingsView{}, fmt.Errorf("check API key for %s: %w", p.Label(), err)
-			}
+			saved, err := k.deps.Secrets.HasKey(p)
+			status.KeySaved = err == nil && saved
 		}
 		view.Providers = append(view.Providers, status)
 	}
@@ -97,7 +99,8 @@ func (k *SettingsKeeper) Current(ctx context.Context) (SettingsView, error) {
 
 // Save makes provider and readingLevel the settings for the next run. A non-empty apiKey is
 // saved for the provider first. An API provider cannot be saved without a key, and an
-// unavailable provider cannot be chosen.
+// unavailable provider cannot be chosen. The key is saved before the settings, so if saving
+// the settings then fails, the key stays saved and retrying succeeds.
 func (k *SettingsKeeper) Save(ctx context.Context, provider, readingLevel, apiKey string) (SettingsView, error) {
 	settings, err := domain.ParseModelSettings(provider, readingLevel)
 	if err != nil {

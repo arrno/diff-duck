@@ -58,13 +58,6 @@ func (s *secretStore) HasKey(p domain.ModelProvider) (bool, error) {
 	_, ok := s.keys[p]
 	return ok, s.err
 }
-func (s *secretStore) LoadKey(p domain.ModelProvider) (string, error) {
-	key, ok := s.keys[p]
-	if !ok {
-		return "", ports.ErrKeyNotSaved
-	}
-	return key, nil
-}
 func (s *secretStore) ClearKey(p domain.ModelProvider) error {
 	if s.err != nil {
 		return s.err
@@ -341,17 +334,68 @@ func TestClearingAnUnknownProvidersKeyIsInvalid(t *testing.T) {
 	}
 }
 
-func TestAKeychainFailureIsReported(t *testing.T) {
+func TestAnUnreadableKeychainLeavesCLIProvidersUsable(t *testing.T) {
+	store := &settingsStore{}
+	secrets := newSecretStore()
+	secrets.keys[domain.ProviderOpenAIAPI] = testKey
+	secrets.err = errors.New("org.freedesktop.DBus.Error.ServiceUnknown")
+	k := newKeeper(store, secrets, allAvailable())
+	view, err := k.Current(context.Background())
+	if err != nil {
+		t.Fatalf("Current: %v", err)
+	}
+	for _, p := range view.Providers {
+		if p.KeySaved {
+			t.Errorf("%s reported a key saved from an unreadable keychain", p.ID)
+		}
+	}
+	view, err = k.Save(context.Background(), "codex", "phd", "")
+	if err != nil || store.saves != 1 || view.Provider != domain.ProviderCodex {
+		t.Errorf("saving a CLI provider: %v, %d saves, %+v", err, store.saves, view)
+	}
+}
+
+func TestAKeychainFailureIsReportedWhereTheKeychainIsNeeded(t *testing.T) {
 	secrets := newSecretStore()
 	secrets.err = errors.New("keychain locked")
 	k := newKeeper(&settingsStore{}, secrets, allAvailable())
-	if _, err := k.Current(context.Background()); !errors.Is(err, secrets.err) {
-		t.Errorf("Current: %v", err)
-	}
 	if _, err := k.Save(context.Background(), "openai-api", "phd", ""); !errors.Is(err, secrets.err) {
 		t.Errorf("Save: %v", err)
 	}
+	// Current ignores keychain read errors, so this error can only come from clearing.
 	if _, err := k.ClearKey(context.Background(), "openai-api"); !errors.Is(err, secrets.err) {
 		t.Errorf("ClearKey: %v", err)
+	}
+}
+
+func TestASettingsStoreFailureFailsTheSave(t *testing.T) {
+	store := &settingsStore{saveErr: errors.New("database is locked")}
+	view, err := newKeeper(store, newSecretStore(), allAvailable()).Save(context.Background(), "codex", "phd", "")
+	if !errors.Is(err, store.saveErr) {
+		t.Errorf("want the store's error, got %v", err)
+	}
+	if view.Provider != "" || view.Providers != nil {
+		t.Errorf("a failed save returned a view: %+v", view)
+	}
+}
+
+func TestKeyFormatBoundaries(t *testing.T) {
+	for name, c := range map[string]struct {
+		key string
+		ok  bool
+	}{
+		"longest":  {strings.Repeat("a", maxKeyBytes), true},
+		"too long": {strings.Repeat("a", maxKeyBytes+1), false},
+		"tilde":    {"sk-~" + testKey, true},
+		"DEL":      {testKey + "\x7f", false},
+	} {
+		secrets := newSecretStore()
+		_, err := newKeeper(&settingsStore{}, secrets, allAvailable()).Save(context.Background(), "openai-api", "phd", c.key)
+		if c.ok && (err != nil || secrets.keys[domain.ProviderOpenAIAPI] != c.key) {
+			t.Errorf("%s: want saved, got %v", name, err)
+		}
+		if !c.ok && (!errors.Is(err, ErrInvalidSettings) || len(secrets.keys) != 0) {
+			t.Errorf("%s: want rejected, got %v", name, err)
+		}
 	}
 }

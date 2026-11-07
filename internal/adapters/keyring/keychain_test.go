@@ -83,10 +83,16 @@ func TestOnlyKeyedProvidersHaveKeys(t *testing.T) {
 	}
 }
 
-func TestKeychainErrorsNeverIncludeTheKey(t *testing.T) {
-	gokeyring.MockInitWithError(errors.New("security: add-generic-password -w " + secret + " failed"))
+var (
+	_ ports.SecretStore = (*Keychain)(nil)
+	_ ports.KeySource   = (*Keychain)(nil)
+)
+
+func TestKeychainErrorsNeverIncludeTheKeyOrLibraryErrors(t *testing.T) {
+	vendor := errors.New("security: add-generic-password -w " + secret + " failed")
+	gokeyring.MockInitWithError(vendor)
 	k := New()
-	errs := map[string]error{"save": k.SaveKey(domain.ProviderAnthropicAPI, secret)}
+	errs := map[string]error{"save": k.SaveKey(domain.ProviderAnthropicAPI, secret), "clear": k.ClearKey(domain.ProviderAnthropicAPI)}
 	_, errs["load"] = k.LoadKey(domain.ProviderAnthropicAPI)
 	_, errs["has"] = k.HasKey(domain.ProviderAnthropicAPI)
 	for op, err := range errs {
@@ -94,8 +100,8 @@ func TestKeychainErrorsNeverIncludeTheKey(t *testing.T) {
 			t.Errorf("%s: a keychain failure was not reported", op)
 			continue
 		}
-		if strings.Contains(err.Error(), secret) {
-			t.Errorf("%s: error includes the key: %v", op, err)
+		if strings.Contains(err.Error(), secret) || strings.Contains(err.Error(), "security:") || errors.Is(err, vendor) {
+			t.Errorf("%s: error carries the key or the library's error: %v", op, err)
 		}
 		if errors.Is(err, ports.ErrKeyNotSaved) {
 			t.Errorf("%s: a keychain failure was reported as no key: %v", op, err)
