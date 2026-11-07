@@ -7,7 +7,7 @@ import { Navbar } from "@/components/Navbar";
 import { Outcomes, ScopeFilters } from "@/components/diff/Outcomes";
 import { UnitList } from "@/components/diff/Unit";
 import { ViewContext, type ViewState } from "@/components/diff/ViewState";
-import type { CompressedDiff } from "@/lib/model";
+import { providerLabel, readingLevelLabel, type CompressedDiff } from "@/lib/model";
 import { assignPackageColors } from "@/lib/packageColor";
 import { allParents, ancestorsOfMatches, bySize, countMatches, isVisible, packageLabel, type Filter } from "@/lib/tree";
 
@@ -144,7 +144,10 @@ export function App({ model, home, actions }: { model: CompressedDiff; home?: st
         </div>
 
         <footer data-testid="generation" className="border-t pt-4 text-xs text-muted-foreground">
-          Model: {model.generation.model}. Prompts: {model.generation.promptVariant}. {model.metrics.compressionRatio.toFixed(1)}x compression in the opening view.
+          {model.generation.provider && <>Provider: {providerLabel(model.generation.provider)}. </>}
+          Model: {model.generation.model}.{" "}
+          {model.generation.readingLevel && <>Reading level: {readingLevelLabel(model.generation.readingLevel)}. </>}
+          Prompts: {model.generation.promptVariant}. {model.metrics.compressionRatio.toFixed(1)}x compression in the opening view.
           {" "}A summary explains apparent behavior; it does not verify the code is correct.
         </footer>
       </main>

@@ -69,26 +69,161 @@ test("short and long pages reserve the same scrollbar space", async ({ page }) =
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).scrollbarGutter)).toBe("stable");
 });
 
-test("the person menu opens, and keeps nothing yet", async ({ page }) => {
-  const requests: string[] = [];
-  page.on("request", (r) => { if (r.method() !== "GET") requests.push(r.url()); });
+for (const theme of ["light", "dark"] as const) {
+  test(`model settings opened in the ${theme} theme pass an accessibility check`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: theme });
+    await page.goto(app);
+    await page.getByRole("button", { name: "Model settings" }).click();
+    await expect(page.getByRole("dialog", { name: "Model settings" }).getByLabel("Reading level")).toBeVisible();
+    await noViolations(page);
+  });
+}
+
+test("a server started with --adapter pins the provider, and the reading level persists", async ({ page }) => {
+  const sent: string[] = [];
+  page.on("request", (r) => { if (r.method() === "PUT") sent.push(r.postData() ?? ""); });
+  await page.goto(app);
+  const trigger = page.getByRole("button", { name: "Model settings" });
+  await trigger.click();
+  const menu = page.getByRole("dialog", { name: "Model settings" });
+  const provider = menu.getByLabel("Provider");
+  await expect(provider).toBeDisabled();
+  await expect(menu.getByTestId("provider-pinned")).toContainText("--adapter scripted:normal");
+  await expect(provider).toHaveAccessibleDescription(/--adapter scripted:normal/);
+  await expect(provider.locator("option")).toHaveCount(4);
+  await expect(provider.locator("option").first()).toContainText("Claude Code");
+  const level = menu.getByLabel("Reading level");
+  await expect(level).toHaveAttribute("aria-valuetext", "6th grade");
+
+  // Keyboard only: into the slider, two steps up, then Save.
+  await level.focus();
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowRight");
+  await expect(level).toHaveAttribute("aria-valuetext", "College");
+  await menu.getByRole("button", { name: "Save" }).focus();
+  await page.keyboard.press("Enter");
+  await expect(menu).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+  expect(sent).toEqual([JSON.stringify({ provider: "claude-code", readingLevel: "college" })]);
+
+  await page.reload();
+  await page.getByRole("button", { name: "Model settings" }).click();
+  await expect(menu.getByLabel("Reading level")).toHaveAttribute("aria-valuetext", "College");
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+  // Put the shared server back as it was, so this test can run again against it.
+  const reset = await page.request.put(`${app}api/settings`, { data: { provider: "claude-code", readingLevel: "6th-grade" } });
+  expect(reset.status()).toBe(200);
+});
+
+// The pinned server cannot reach the key flow without a keychain, so these tests stub the API.
+const stubProviders = (keySaved: boolean) => [
+  { id: "claude-code", label: "Claude Code", available: true, needsKey: false, keySaved: false },
+  { id: "codex", label: "Codex", available: false, needsKey: false, keySaved: false },
+  { id: "anthropic-api", label: "Anthropic API", available: true, needsKey: true, keySaved },
+  { id: "openai-api", label: "OpenAI API", available: true, needsKey: true, keySaved: false },
+];
+const stubSettings = (keySaved: boolean) => ({ provider: "anthropic-api", readingLevel: "6th-grade", pinned: "", providers: stubProviders(keySaved) });
+const settingsAPI = (url: URL) => url.pathname.startsWith("/api/settings");
+
+test("an API provider takes a key that is never kept in the page", async ({ page }) => {
+  const rejected = "sk-test rejected";
+  const key = "sk-test-not-a-real-key";
+  let keySaved = true;
+  const calls: string[] = [];
+  await page.route(settingsAPI, async (route) => {
+    const r = route.request();
+    calls.push(`${r.method()} ${new URL(r.url()).pathname} ${r.postData() ?? ""}`.trim());
+    if (r.method() === "DELETE") keySaved = false;
+    if (r.method() === "PUT") {
+      if (r.postData()?.includes(rejected)) {
+        return route.fulfill({ status: 400, json: { error: "invalid settings: the API key may hold only printable ASCII without spaces" } });
+      }
+      keySaved = true;
+    }
+    return route.fulfill({ json: stubSettings(keySaved) });
+  });
   await page.goto(app);
   await page.getByRole("button", { name: "Model settings" }).click();
   const menu = page.getByRole("dialog", { name: "Model settings" });
-  await expect(menu.getByLabel("Provider")).toHaveValue("Anthropic");
-  await menu.getByLabel("Provider").selectOption("OpenAI");
-  await menu.getByLabel("API key").fill("not-a-real-key");
+  const provider = menu.getByLabel("Provider");
+  await expect(provider).toBeEnabled();
+  await expect(provider).toHaveValue("anthropic-api");
+  await expect(provider.locator("option", { hasText: "Codex" })).toHaveText("Codex (not installed)");
+  await expect(provider.locator("option", { hasText: "Codex" })).toBeDisabled();
+  await expect(menu.getByText("Key saved")).toBeVisible();
+  const keyField = menu.getByLabel("API key");
+  await expect(keyField).toHaveAttribute("placeholder", "Leave blank to keep the saved key");
+  await expect(keyField).toHaveAttribute("type", "password");
+  // Password managers are told to leave the key alone (K1).
+  await expect(keyField).toHaveAttribute("autocomplete", "off");
+  await expect(keyField).toHaveAttribute("data-1p-ignore", "true");
+  await expect(keyField).toHaveAttribute("data-lpignore", "true");
   await noViolations(page);
+
+  // Clearing the key keeps a reading level chosen but not yet saved.
+  const level = menu.getByLabel("Reading level");
+  await level.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(level).toHaveAttribute("aria-valuetext", "High school");
+  await menu.getByRole("button", { name: "Clear key" }).click();
+  await expect(menu.getByRole("status")).toHaveText("Key cleared.");
+  await expect(menu.getByText("Key saved")).toHaveCount(0);
+  await expect(menu.getByRole("button", { name: "Clear key" })).toHaveCount(0);
+  await expect(keyField).toBeFocused();
+  await expect(keyField).not.toHaveAttribute("placeholder", /.+/);
+  await expect(level).toHaveAttribute("aria-valuetext", "High school");
+  await expect(provider).toHaveValue("anthropic-api");
+
+  await keyField.fill(rejected);
+  await menu.getByRole("button", { name: "Save" }).click();
+  await expect(menu.getByRole("alert")).toHaveText(/printable ASCII.*Enter the key again\./);
+  await expect(menu).toBeVisible();
+  await expect(keyField).toHaveValue("");
+
+  await keyField.fill(key);
   await menu.getByRole("button", { name: "Save" }).click();
   await expect(menu).toHaveCount(0);
-  expect(requests).toEqual([]);
-  const stored = await page.evaluate(() => JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage }));
-  expect(stored).not.toContain("not-a-real-key");
+  expect(calls).toEqual([
+    "GET /api/settings",
+    "DELETE /api/settings/keys/anthropic-api",
+    `PUT /api/settings ${JSON.stringify({ provider: "anthropic-api", readingLevel: "high-school", apiKey: rejected })}`,
+    `PUT /api/settings ${JSON.stringify({ provider: "anthropic-api", readingLevel: "high-school", apiKey: key })}`,
+  ]);
+
   await page.getByRole("button", { name: "Model settings" }).click();
+  await expect(menu.getByText("Key saved")).toBeVisible();
   await expect(menu.getByLabel("API key")).toHaveValue("");
+  // A CLI provider has no key field.
+  await provider.selectOption("claude-code");
+  await expect(menu.getByLabel("API key")).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(menu).toHaveCount(0);
+  const stored = await page.evaluate(() => JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage }) + document.documentElement.outerHTML);
+  expect(stored).not.toContain(key);
 });
+
+test("closing the menu while a save is in flight leaves it usable", async ({ page }) => {
+  let release = () => {};
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route(settingsAPI, async (route) => {
+    if (route.request().method() === "PUT") await held;
+    return route.fulfill({ json: stubSettings(true) });
+  });
+  await page.goto(app);
+  const trigger = page.getByRole("button", { name: "Model settings" });
+  await trigger.click();
+  const menu = page.getByRole("dialog", { name: "Model settings" });
+  await menu.getByRole("button", { name: "Save" }).click();
+  await expect(menu.getByRole("button", { name: "Saving…" })).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+  release();
+  await trigger.click();
+  await expect(menu.getByRole("button", { name: "Save" })).toBeEnabled();
+  await expect(menu.getByRole("button", { name: "Clear key" })).toBeEnabled();
+});
+
 
 test("a path that is not a repo says so", async ({ page }) => {
   await page.goto(`${app}#/new`);

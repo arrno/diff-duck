@@ -21,8 +21,13 @@ code=$?
 set -e
 [ "$code" -eq 3 ] || { echo "expected exit 3 from a total model failure, got $code"; exit 1; }
 
-# The local app, on a free port, with its own database.
-DIFFDUCK_HOME="$VERIFY_WORK/home" "$bin" serve --adapter scripted:normal --no-cache --no-open --port 0 --db "$VERIFY_WORK/app/diffs.db" >"$VERIFY_WORK/server.log" 2>&1 &
+# The local app, on a free port, with its own database. Stand-in claude and codex binaries make
+# both CLI providers available whatever this machine has installed; the scripted model means
+# neither is ever run.
+stubs="$VERIFY_WORK/stub-bin"
+mkdir -p "$stubs"
+for name in claude codex; do printf '#!/bin/sh\nexit 1\n' >"$stubs/$name"; chmod +x "$stubs/$name"; done
+PATH="$stubs:$PATH" DIFFDUCK_HOME="$VERIFY_WORK/home" "$bin" serve --adapter scripted:normal --no-cache --no-open --port 0 --db "$VERIFY_WORK/app/diffs.db" >"$VERIFY_WORK/server.log" 2>&1 &
 server=$!
 for _ in $(seq 1 100); do
   APP_URL="$(grep -o 'http://127.0.0.1:[0-9]*/' "$VERIFY_WORK/server.log" || true)"
