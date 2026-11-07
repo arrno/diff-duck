@@ -246,3 +246,26 @@ provider with no key saved and none given is a 400.
 - **Known limitations (accepted):** a FIELD -> METHOD change with one unit per side pairs as CHANGE
   (a real kind change); Python ignores a lone `@generated` header while the others honor it; unit
   text slices keep a file (<= 2 MiB) alive for the run.
+
+## Integrated review (6f283fd)
+
+Four independent reviewers. Architecture found no violations. Consolidated findings and owners:
+
+| # | Sev | Finding | Fix step |
+| --- | --- | --- | --- |
+| 1 | BLOCKING | No test runs the app unpinned; the picker could silently do nothing (B3) | F2 |
+| 2 | BLOCKING | No test checks the popover saves the chosen provider or shows it on a diff (B3) | F2 |
+| 3 | WARNING | `packageExists` re-parses a directory per namespace/package: K×M parses (DoS) | F1 |
+| 4 | WARNING | A MODULE leaf sends the whole file and is falsely marked truncated / low confidence | F1 |
+| 5 | WARNING | Java enum-constant bodies are never explained | F1 |
+| 6 | WARNING | Codex kill-at-first-tool is a no-op on non-Unix | F2 (fail closed: unavailable) |
+| 7 | WARNING | Differ cancel propagation untested; Rust timing test flaky | F1 |
+| 8 | NOTE | `reset` wipes settings | F2 (keep settings) |
+| 9 | NOTE | Pinned picker shows the saved, not the pinned, provider | F2 |
+| 10 | NOTE | `NewWithKey` honors ANTHROPIC_BASE_URL/CUSTOM_HEADERS | F2 |
+| 11 | NOTE | Test gaps: ENUM_MEMBER structural, viewer new kinds, enclosingCandidate tie | F1/F2 |
+| 12 | NOTE | Provider availability is checked at save time and at run time | F2 documents it as intentional |
+| — | queued | Qualified-name memory budget for all languages | F1 |
+
+Open question: B5 "key survives restart" is proven only by the opt-in `keychain`-tag test against
+the real OS keychain; `make verify` uses the mock. Recorded as a known limitation.
