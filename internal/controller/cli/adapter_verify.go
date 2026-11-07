@@ -14,7 +14,7 @@ import (
 func verificationModel(adapter string) (ports.LanguageModel, error) {
 	behavior, ok := strings.CutPrefix(adapter, "scripted:")
 	if !ok {
-		return nil, fmt.Errorf("unknown adapter %q: use claude-cli, anthropic-api, or scripted:<behavior>", adapter)
+		return nil, fmt.Errorf("unknown adapter %q: use "+adapterNames+", or scripted:<behavior>", adapter)
 	}
 	return scriptedmodel.New(scriptedmodel.Behavior(behavior))
 }

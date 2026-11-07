@@ -30,10 +30,13 @@ const (
 
 // LibraryDeps are what a DiffLibrary needs from the outside world.
 type LibraryDeps struct {
-	Store         ports.DiffStore
-	Repositories  ports.RepositorySource
-	Analyzer      ports.SourceAnalyzer
-	Model         ports.LanguageModel
+	Store        ports.DiffStore
+	Repositories ports.RepositorySource
+	Analyzer     ports.SourceAnalyzer
+	// Models opens the model each run uses, from the settings read when the run was requested.
+	Models ports.ModelOpener
+	// Settings supplies those settings. When nil, every run uses the default settings.
+	Settings      *SettingsKeeper
 	Prompts       ports.PromptSource
 	Concurrency   int
 	MaxModelCalls int
@@ -100,6 +103,14 @@ func (l *DiffLibrary) StartDiff(ctx context.Context, target, base, head string) 
 			return nil, err
 		}
 	}
+	// Read once, so a diff keeps the settings it was requested with even while it waits.
+	settings := domain.DefaultModelSettings()
+	if l.deps.Settings != nil {
+		var err error
+		if settings, err = l.deps.Settings.Settings(ctx); err != nil {
+			return nil, err
+		}
+	}
 	diff := &domain.SavedDiff{
 		ID:         rand.Text(),
 		Repository: target,
@@ -125,7 +136,7 @@ func (l *DiffLibrary) StartDiff(ctx context.Context, target, base, head string) 
 	go func() {
 		defer l.wg.Done()
 		defer l.finish(work.ID, cancel)
-		l.run(runCtx, &work)
+		l.run(runCtx, &work, settings)
 	}()
 	return diff, nil
 }
@@ -158,8 +169,8 @@ func (l *DiffLibrary) finish(id string, cancel context.CancelFunc) {
 	l.mu.Unlock()
 }
 
-func (l *DiffLibrary) run(ctx context.Context, diff *domain.SavedDiff) {
-	result, err := l.compress(ctx, diff)
+func (l *DiffLibrary) run(ctx context.Context, diff *domain.SavedDiff, settings domain.ModelSettings) {
+	result, err := l.compress(ctx, diff, settings)
 	finished := l.now()
 	diff.FinishedAt, diff.Stage = &finished, ""
 	switch {
@@ -184,7 +195,7 @@ func (l *DiffLibrary) run(ctx context.Context, diff *domain.SavedDiff) {
 	_ = l.deps.Store.Update(save, diff)
 }
 
-func (l *DiffLibrary) compress(ctx context.Context, diff *domain.SavedDiff) (*domain.CompressedDiff, error) {
+func (l *DiffLibrary) compress(ctx context.Context, diff *domain.SavedDiff, settings domain.ModelSettings) (*domain.CompressedDiff, error) {
 	select {
 	case l.slots <- struct{}{}:
 		defer func() { <-l.slots }()
@@ -196,6 +207,17 @@ func (l *DiffLibrary) compress(ctx context.Context, diff *domain.SavedDiff) (*do
 		// Progress is a courtesy, so a failed write must not stop the work.
 		_ = l.deps.Store.Update(ctx, diff)
 	}
+	progress("Preparing the model")
+	if l.deps.Models == nil {
+		return nil, errors.New("no model is configured")
+	}
+	opened, err := l.deps.Models.Open(ctx, settings)
+	if err != nil {
+		return nil, err
+	}
+	if opened.Close != nil {
+		defer opened.Close()
+	}
 	progress("Opening the repository")
 	repo, err := l.deps.Repositories.Open(ctx, diff.Repository)
 	if err != nil {
@@ -203,13 +225,15 @@ func (l *DiffLibrary) compress(ctx context.Context, diff *domain.SavedDiff) (*do
 	}
 	defer repo.Close()
 	differ := NewStructuralDiffer(repo, l.deps.Analyzer)
-	compressor := NewDiffCompressor(repo, differ, l.deps.Model, l.deps.Prompts, l.deps.Concurrency)
+	compressor := NewDiffCompressor(repo, differ, opened.Model, l.deps.Prompts, l.deps.Concurrency)
 	return compressor.Compress(ctx, CompressRequest{
 		Repository:    diff.Repository,
 		Base:          diff.Base,
 		Head:          diff.Head,
 		MaxModelCalls: l.deps.MaxModelCalls,
 		Progress:      progress,
+		ReadingLevel:  settings.ReadingLevel,
+		Provider:      opened.Provider,
 	})
 }
 

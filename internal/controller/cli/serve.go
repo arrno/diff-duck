@@ -16,6 +16,7 @@ import (
 
 	"github.com/arrno/diff-duck/internal/adapters/gitrepo"
 	"github.com/arrno/diff-duck/internal/adapters/goanalysis"
+	"github.com/arrno/diff-duck/internal/adapters/keyring"
 	"github.com/arrno/diff-duck/internal/adapters/sqlitestore"
 	"github.com/arrno/diff-duck/internal/controller/htmlview"
 	"github.com/arrno/diff-duck/internal/controller/server"
@@ -30,6 +31,8 @@ type serveOptions struct {
 	dbPath string
 	noOpen bool
 	args   []string
+	// adapterPinned is set when --adapter was given, which overrides the saved provider.
+	adapterPinned bool
 }
 
 func runServe(ctx context.Context, args []string, stdout, stderr io.Writer) int {
@@ -67,6 +70,7 @@ func parseServe(fs *flag.FlagSet, args []string, opts *serveOptions) (int, bool)
 		fs.Usage()
 		return exitUsage, false
 	}
+	fs.Visit(func(f *flag.Flag) { opts.adapterPinned = opts.adapterPinned || f.Name == "adapter" })
 	return 0, true
 }
 
@@ -87,11 +91,15 @@ func serve(ctx context.Context, opts serveOptions, stdout io.Writer) error {
 	}
 	defer store.Close()
 
-	model, closeModel, err := buildModel(opts.options)
-	if err != nil {
-		return err
+	models := modelOpener{opts: opts.options, pinned: opts.adapterPinned, keys: keyring.New(), available: installedProviders{}}
+	if models.pinned {
+		// A pinned adapter that cannot work fails now rather than on every diff.
+		check, err := openAdapter(opts.options)
+		if err != nil {
+			return err
+		}
+		check.Close()
 	}
-	defer closeModel()
 	prompts, err := buildPrompts(opts.options)
 	if err != nil {
 		return err
@@ -102,10 +110,12 @@ func serve(ctx context.Context, opts serveOptions, stdout io.Writer) error {
 	}
 
 	library := services.NewDiffLibrary(services.LibraryDeps{
-		Store:         store,
-		Repositories:  gitrepo.Source{},
-		Analyzer:      goanalysis.New(),
-		Model:         model,
+		Store:        store,
+		Repositories: gitrepo.Source{},
+		Analyzer:     goanalysis.New(),
+		Models:       models,
+		// S5 stand-in for S6's SettingsKeeper composition; integration points this at S6's keeper.
+		Settings:      services.NewSettingsKeeper(services.SettingsDeps{Store: store, Secrets: keyring.New(), Availability: installedProviders{}}),
 		Prompts:       prompts,
 		Concurrency:   opts.concurrency,
 		MaxModelCalls: opts.maxModelCalls,

@@ -98,6 +98,10 @@ var ErrModelRefused = errors.New("model refused the request")
 type PromptSource interface {
 	// Load returns the named prompt's text and identity.
 	Load(name string) (text string, info domain.PromptInfo, err error)
+	// LoadReadingLevel returns the instruction for writing at a reading level, and its
+	// identity. Implementations reject a level that fails domain validation, so a raw string
+	// never selects a file (K3).
+	LoadReadingLevel(level domain.ReadingLevel) (text string, info domain.PromptInfo, err error)
 	// Variant names the set of prompts this source provides.
 	Variant() string
 }
@@ -148,4 +152,23 @@ var ErrKeyNotSaved = errors.New("no API key saved")
 // a CLI provider's binary is on PATH. It says nothing about saved keys.
 type ProviderAvailability interface {
 	Available(provider domain.ModelProvider) bool
+}
+
+// ModelOpener opens the language model one run uses, chosen from the effective settings.
+// An implementation may override the settings' provider, such as when the app was started
+// with an explicit adapter, and reports the provider it actually used.
+type ModelOpener interface {
+	// Open returns the model for a run with these settings. A provider that cannot be used
+	// returns an error a person can act on; a missing API key wraps ErrKeyNotSaved. Errors
+	// never include a key (K1).
+	Open(ctx context.Context, settings domain.ModelSettings) (OpenedModel, error)
+}
+
+// OpenedModel is a model ready for one run. Close releases it when the run ends.
+type OpenedModel struct {
+	Model LanguageModel
+	// Provider is the provider the model belongs to. It is empty for a model no person can
+	// choose, such as a verification adapter.
+	Provider domain.ModelProvider
+	Close    func()
 }
