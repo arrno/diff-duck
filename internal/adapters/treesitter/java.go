@@ -3,7 +3,6 @@ package treesitter
 import (
 	"context"
 	_ "embed"
-	"fmt"
 	"path"
 	"strings"
 
@@ -61,29 +60,25 @@ func (*Java) Supports(p string) bool { return strings.HasSuffix(p, ".java") }
 
 // Analyze parses one Java file into units.
 func (a *Java) Analyze(ctx context.Context, p string, src []byte) (domain.FileAnalysis, error) {
-	tree, err := a.rt.Parse(ctx, javaGrammar, src)
+	tree, err := parseClean(ctx, a.rt, javaGrammar, p, src)
 	if err != nil {
-		return domain.FileAnalysis{}, fmt.Errorf("parse %s: %w", p, err)
+		return domain.FileAnalysis{}, err
 	}
+	return extractJava(ctx, tree, p)
+}
+
+// extractJava extracts the units of a cleanly parsed Java file.
+func extractJava(ctx context.Context, tree *Tree, p string) (domain.FileAnalysis, error) {
 	root := tree.Root()
-	if root.HasError() {
-		return domain.FileAnalysis{}, fmt.Errorf("parse %s: %w near line %d", p, ErrSyntax, root.FirstError().StartLine())
+	pkg := dirPackage(p)
+	if name := javaPackageName(root); name != "" {
+		pkg.Name = name
 	}
-	dir := path.Dir(p)
-	pkgName := javaPackageName(root)
-	if pkgName == "" && dir != "." {
-		pkgName = path.Base(dir)
-	}
-	e := &javaExtractor{
-		text: string(src),
-		path: p,
-		pkg:  domain.PackageRef{Dir: dir, Name: pkgName},
-		test: isJavaTest(p),
-	}
+	e := &javaExtractor{fileUnits{ctx: ctx, path: p, pkg: pkg, test: isJavaTest(p)}}
 	// A file is generated when its header says so, or when every type it declares is annotated
 	// @Generated. One annotated type beside hand-written ones does not hide the others.
 	types, annotated := 0, 0
-	javaDeclarations(root, func(n, doc Node) {
+	e.declarations(root, func(n, doc Node) {
 		if javaTypeKinds[n.Type()] != "" {
 			e.typeDecl(n, doc, "")
 			types++
@@ -92,12 +87,10 @@ func (a *Java) Analyze(ctx context.Context, p string, src []byte) (domain.FileAn
 			}
 		}
 	})
-	return domain.FileAnalysis{
+	return e.analysis(domain.FileAnalysis{
 		Package:   e.pkg,
-		Units:     e.units,
 		Generated: isJavaGeneratedHeader(root) || types > 0 && annotated == types,
-		Test:      e.test,
-	}, nil
+	})
 }
 
 // javaTypeKinds maps a type declaration to its unit kind.
@@ -109,21 +102,7 @@ var javaTypeKinds = map[string]domain.UnitKind{
 	"record_declaration":          domain.KindRecord,
 }
 
-type javaExtractor struct {
-	text  string // the file's source, copied once
-	path  string
-	pkg   domain.PackageRef
-	test  bool
-	units []domain.Unit
-}
-
-func (e *javaExtractor) finish(u domain.Unit) domain.Unit {
-	u.Package = e.pkg
-	u.File = e.path
-	u.Test = e.test
-	u.Signature = compact(u.Signature)
-	return u
-}
+type javaExtractor struct{ fileUnits }
 
 // span sets a unit's lines and code: the declaration, from its Javadoc when it has one.
 func (e *javaExtractor) span(u *domain.Unit, n, doc Node) {
@@ -132,9 +111,7 @@ func (e *javaExtractor) span(u *domain.Unit, n, doc Node) {
 		from = doc
 	}
 	u.StartLine, u.EndLine = from.StartLine(), n.EndLine()
-	// A slice of the one copy of the file, so nested types share their text rather than
-	// copying it once per level of nesting.
-	u.Source = e.text[from.StartByte():n.EndByte()]
+	u.Source = from.TextUntil(n.EndByte())
 	u.Doc = javaDocText(doc)
 }
 
@@ -147,8 +124,7 @@ func (e *javaExtractor) typeDecl(n, doc Node, scope string) {
 	name := javaQualify(scope, nameNode.Text())
 	kind := javaTypeKinds[n.Type()]
 	body := n.ChildByField("body")
-	slot := len(e.units)
-	e.units = append(e.units, domain.Unit{})
+	slot := e.reserve()
 	owned := map[Node]bool{}
 	var order []string
 	var canonical string // a record's component types, the compact constructor's parameters
@@ -179,7 +155,7 @@ func (e *javaExtractor) typeDecl(n, doc Node, scope string) {
 // members extracts the members a type body declares. Every member that became a unit is
 // recorded in owned, so the type's hash leaves it out.
 func (e *javaExtractor) members(body Node, scope string, iface bool, canonical string, owned map[Node]bool) {
-	javaDeclarations(body, func(n, doc Node) {
+	e.declarations(body, func(n, doc Node) {
 		switch t := n.Type(); {
 		case javaTypeKinds[t] != "":
 			e.typeDecl(n, doc, scope)
@@ -304,19 +280,22 @@ func javaQualify(scope, name string) string {
 	return domain.QualifiedName(scope, name)
 }
 
-// javaDeclarations calls visit for each declaration in a program or type body, with the Javadoc
+// declarations calls visit for each declaration in a program or type body, with the Javadoc
 // comment just before it, or a null node. An enum's members after its constants are visited
-// like any other body's.
-func javaDeclarations(body Node, visit func(n, doc Node)) {
+// like any other body's. It stops once the analysis is cancelled.
+func (e *javaExtractor) declarations(body Node, visit func(n, doc Node)) {
 	var doc Node
 	for _, c := range body.Children() {
+		if e.stopped() {
+			return
+		}
 		switch {
 		case c.IsExtra():
 			if c.Type() == "block_comment" && strings.HasPrefix(c.Text(), "/**") {
 				doc = c
 			}
 		case c.Type() == "enum_body_declarations":
-			javaDeclarations(c, visit)
+			e.declarations(c, visit)
 			doc = Node{}
 		case c.IsNamed():
 			visit(c, doc)
@@ -426,7 +405,7 @@ func javaWordByte(c byte) bool {
 func javaHeader(n, body Node) string {
 	text := n.Text()
 	if !body.IsNull() {
-		text = string(n.t.src[n.StartByte():body.StartByte()])
+		text = n.TextUntil(body.StartByte())
 	}
 	return strings.TrimSuffix(strings.TrimSpace(text), ";")
 }
@@ -510,16 +489,8 @@ func isJavaTest(p string) bool {
 // isJavaGeneratedHeader reports whether the comments before the first declaration mark the file
 // generated: "Generated ... DO NOT EDIT" (protoc and most generators) or an @generated tag.
 func isJavaGeneratedHeader(root Node) bool {
-	var header strings.Builder
-	for _, c := range root.Children() {
-		if !c.IsExtra() {
-			break
-		}
-		header.WriteString(c.Text() + "\n")
-	}
-	lower := strings.ToLower(header.String())
-	return strings.Contains(lower, "@generated") ||
-		strings.Contains(lower, "generated") && (strings.Contains(lower, "do not edit") || strings.Contains(lower, "do not modify"))
+	header := leadingComments(root)
+	return markedGenerated(header) || strings.Contains(header, "generated") && strings.Contains(header, "do not modify")
 }
 
 // javaHasGeneratedAnnotation reports whether a type declaration is annotated @Generated

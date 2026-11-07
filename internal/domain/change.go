@@ -105,6 +105,11 @@ type FileAnalysis struct {
 // a module: "util" and "Repo" give "util.Repo".
 func QualifiedName(scope, name string) string { return scope + "." + name }
 
+// ModuleSignature is the signature of the MODULE unit of the file at path: "module " and the
+// path, such as "module pkg/util.py". It is the same in every language, so a module's
+// signature tells a reader which file it is however the language names modules.
+func ModuleSignature(path string) string { return "module " + path }
+
 // Requalify gives a name qualified by one scope the same name in another, as when a module is
 // renamed: Requalify("old.Repo.get", "old", "new") is "new.Repo.get". Other names are returned
 // unchanged.

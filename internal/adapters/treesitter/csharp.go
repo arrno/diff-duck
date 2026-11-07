@@ -76,47 +76,39 @@ const csTopLevel = "<top-level statements>"
 
 // Analyze parses one C# file into units.
 func (a *CSharp) Analyze(ctx context.Context, p string, src []byte) (domain.FileAnalysis, error) {
-	tree, err := a.rt.Parse(ctx, csharpGrammar, src)
+	tree, err := parseClean(ctx, a.rt, csharpGrammar, p, src)
 	if err != nil {
-		return domain.FileAnalysis{}, fmt.Errorf("parse %s: %w", p, err)
+		return domain.FileAnalysis{}, err
 	}
+	return extractCSharp(ctx, tree, p)
+}
+
+// extractCSharp extracts the units of a cleanly parsed C# file.
+func extractCSharp(ctx context.Context, tree *Tree, p string) (domain.FileAnalysis, error) {
 	root := tree.Root()
-	if root.HasError() {
-		return domain.FileAnalysis{}, fmt.Errorf("parse %s: %w near line %d", p, ErrSyntax, root.FirstError().StartLine())
-	}
 	e := &csExtractor{
-		path:      p,
-		dir:       path.Dir(p),
-		text:      string(src),
-		test:      isCSharpTestPath(p) || csUsesTestAttributes(root),
-		nameBytes: csNameBudget(len(src)),
+		fileUnits: fileUnits{
+			ctx:  ctx,
+			path: p,
+			pkg:  dirPackage(p),
+			test: isCSharpTestPath(p) || csUsesTestAttributes(tree),
+		},
+		nameBytes: csNameBudget(len(tree.Text())),
 	}
 	e.scope(root, "", "", false, map[Node]bool{})
 	if e.nameBytes < 0 {
 		return domain.FileAnalysis{}, fmt.Errorf("parse %s: %w: its qualified names grow far beyond its size", p, ErrTooLarge)
 	}
-	pkg := e.pkg("")
-	if e.firstNS != "" {
-		pkg = e.pkg(e.firstNS)
-	}
-	for i := range e.units {
-		e.units[i].Test = e.test
-	}
-	return domain.FileAnalysis{
-		Package:   pkg,
-		Units:     e.units,
+	return e.analysis(domain.FileAnalysis{
+		Package:   e.pkgOf(e.firstNS),
 		Generated: isCSharpGenerated(p, root),
-		Test:      e.test,
-	}, nil
+	})
 }
 
+// csExtractor's fileUnits package is the global namespace's; each unit's is its namespace's.
 type csExtractor struct {
-	path    string
-	dir     string
-	text    string // the file's source, copied once; units' Source are slices of it
-	test    bool
+	fileUnits
 	firstNS string // the first namespace the file declares
-	units   []domain.Unit
 	// nameBytes is what qualified names may still allocate. Each nesting level repeats its
 	// enclosing names, so deliberately nested code could otherwise turn a small file into
 	// gigabytes of names. Negative means exhausted, and extraction stops.
@@ -140,31 +132,19 @@ func (e *csExtractor) qualify(scope, name string) string {
 	return domain.QualifiedName(scope, name)
 }
 
-// slice returns the source from one node's start to another's end, sharing the file's copy.
-func (e *csExtractor) slice(from, to Node) string { return e.text[from.StartByte():to.EndByte()] }
-
-// pkg returns the package of a namespace; the global namespace is named after the directory.
-func (e *csExtractor) pkg(ns string) domain.PackageRef {
-	if ns != "" {
-		return domain.PackageRef{Dir: e.dir, Name: ns}
+// pkgOf returns the package of a namespace; the global namespace is named after the directory.
+func (e *csExtractor) pkgOf(ns string) domain.PackageRef {
+	if ns == "" {
+		return e.pkg
 	}
-	if e.dir == "." {
-		return domain.PackageRef{Dir: e.dir}
-	}
-	return domain.PackageRef{Dir: e.dir, Name: path.Base(e.dir)}
-}
-
-func (e *csExtractor) reserve() int {
-	e.units = append(e.units, domain.Unit{})
-	return len(e.units) - 1
+	return domain.PackageRef{Dir: e.pkg.Dir, Name: ns}
 }
 
 func (e *csExtractor) unit(u domain.Unit, ns string, n Node) domain.Unit {
-	u.Package = e.pkg(ns)
-	u.File = e.path
-	u.Signature = compact(u.Signature)
+	u = e.finish(u)
+	u.Package = e.pkgOf(ns)
 	u.StartLine, u.EndLine = n.StartLine(), n.EndLine()
-	u.Source = e.slice(n, n)
+	u.Source = n.Text()
 	return u
 }
 
@@ -211,7 +191,7 @@ func (e *csExtractor) scope(container Node, ns, typeName string, inInterface boo
 	names := csMemberNames(decls)
 	var globals []Node
 	for _, d := range decls {
-		if e.nameBytes < 0 {
+		if e.nameBytes < 0 || e.stopped() {
 			return
 		}
 		n := d.node
@@ -265,11 +245,9 @@ func (e *csExtractor) scope(container Node, ns, typeName string, inInterface boo
 			Signature: "top-level statements",
 			Hash:      csHash(nil).hash(globals...),
 		}
-		u.Package = e.pkg("")
-		u.File = e.path
 		u.StartLine, u.EndLine = first.StartLine(), last.EndLine()
-		u.Source = e.slice(first, last)
-		e.units = append(e.units, u)
+		u.Source = first.TextUntil(last.EndByte())
+		e.units = append(e.units, e.finish(u))
 	}
 }
 
@@ -395,26 +373,20 @@ func (e *csExtractor) fields(d csDecl, ns, scope string) {
 	code := csHash(nil).hash(n)
 	// Sliced and compacted once and shared by every name: a copy per name would grow with the
 	// square of the declaration's length.
-	source := e.slice(n, n)
-	signature := compact(strings.TrimSuffix(source, ";"))
+	signature := compact(strings.TrimSuffix(n.Text(), ";"))
 	for _, v := range decl.NamedChildren() {
 		if v.Type() != "variable_declarator" || e.nameBytes < 0 {
 			continue
 		}
 		name := v.ChildByField("name").Text()
-		e.units = append(e.units, domain.Unit{
-			Package:   e.pkg(ns),
+		e.add(domain.Unit{
 			Kind:      kind,
 			Name:      e.qualify(scope, name),
 			Parent:    scope,
 			Signature: signature,
-			File:      e.path,
-			StartLine: n.StartLine(),
-			EndLine:   n.EndLine(),
 			Hash:      hashStrings(name, code),
 			Doc:       d.doc,
-			Source:    source,
-		})
+		}, ns, n)
 	}
 }
 
@@ -646,8 +618,7 @@ func csHeader(n Node) string {
 			break
 		}
 	}
-	text := string(n.t.src[n.StartByte():end])
-	return strings.TrimSuffix(strings.TrimSpace(text), ";")
+	return strings.TrimSuffix(strings.TrimSpace(n.TextUntil(end)), ";")
 }
 
 func csStartsBody(c Node) bool {
@@ -687,23 +658,13 @@ func csHash(owned map[Node]bool) fingerprint {
 			if n.Type() == "," {
 				// Commas between enum members belong to the members, which are units of their
 				// own; a trailing comma is formatting.
-				if n.Parent().Type() == "enum_member_declaration_list" || csNextSibling(n).Type() == "}" {
+				if n.Parent().Type() == "enum_member_declaration_list" || n.NextSibling().Type() == "}" {
 					return "", false
 				}
 			}
 			return n.Text(), true
 		},
 	}
-}
-
-// csNextSibling returns the next sibling that is not an extra, in constant time.
-func csNextSibling(n Node) Node {
-	for i := n.rec().next; i != -1; i = n.t.nodes[i].next {
-		if n.t.nodes[i].flags&flagExtra == 0 {
-			return Node{t: n.t, i: i}
-		}
-	}
-	return Node{}
 }
 
 // csCleanDoc turns /// comment lines into text, dropping the <summary> wrapper.
@@ -752,13 +713,8 @@ func isCSharpTestAttribute(attr Node) bool {
 }
 
 // csUsesTestAttributes reports whether any declaration in the tree carries a test attribute.
-func csUsesTestAttributes(root Node) bool {
-	for i := range root.t.nodes {
-		if root.t.nodes[i].typ == "attribute" && isCSharpTestAttribute(Node{t: root.t, i: int32(i)}) {
-			return true
-		}
-	}
-	return false
+func csUsesTestAttributes(tree *Tree) bool {
+	return tree.Any(func(n Node) bool { return n.Type() == "attribute" && isCSharpTestAttribute(n) })
 }
 
 // isCSharpGenerated reports whether a file is generated, by the conventions the C# compiler
@@ -773,14 +729,6 @@ func isCSharpGenerated(p string, root Node) bool {
 	if strings.HasPrefix(base, "temporarygeneratedfile_") {
 		return true
 	}
-	for _, c := range root.Children() {
-		if !c.IsExtra() {
-			break
-		}
-		lower := strings.ToLower(c.Text())
-		if strings.Contains(lower, "<auto-generated") || strings.Contains(lower, "<autogenerated") {
-			return true
-		}
-	}
-	return false
+	header := leadingComments(root)
+	return strings.Contains(header, "<auto-generated") || strings.Contains(header, "<autogenerated")
 }
