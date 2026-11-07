@@ -171,6 +171,12 @@ func (d *StructuralDiffer) packageExists(ctx context.Context, sha string, ref do
 			if err != nil || analysis.Package == ref {
 				return true
 			}
+			// A file can declare several packages, such as C# namespaces; each unit names its own.
+			for _, u := range analysis.Units {
+				if u.Package == ref {
+					return true
+				}
+			}
 		}
 	}
 	return false

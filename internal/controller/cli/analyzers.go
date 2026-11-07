@@ -21,6 +21,7 @@ func buildAnalyzers(ctx context.Context) ([]ports.SourceAnalyzer, func(), error)
 		treesitter.NewJava(rt),
 		treesitter.NewJavaScript(rt),
 		treesitter.NewRust(rt),
+		treesitter.NewCSharp(rt),
 	}
 	return analyzers, func() { _ = rt.Close(context.Background()) }, nil
 }
