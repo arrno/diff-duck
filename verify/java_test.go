@@ -174,6 +174,31 @@ func TestJavaFieldAndMethodWithOneNameStayApart(t *testing.T) {
 	}
 }
 
+// An enum constant's class body holds real logic. A change there is the method's, which is
+// explained by the model, not a structural enum-member change that never reaches it.
+func TestJavaEnumConstantBodyChangeIsExplainedAsItsMethod(t *testing.T) {
+	enum := func(op string) string {
+		return "enum Op {\n    PLUS {\n        int apply(int a, int b) {\n            return a + b;\n        }\n    },\n    MINUS {\n        int apply(int a, int b) {\n            return a " + op + " b;\n        }\n    };\n\n    abstract int apply(int a, int b);\n}\n"
+	}
+	s := repo(t, map[string]string{"Op.java": enum("-")}, map[string]string{"Op.java": enum("+")})
+	r := structure(t, s)
+	checkTotals(t, s, r)
+	method := allNamed(r, "Op.MINUS.apply(int,int)")
+	if len(method) != 1 || method[0].Kind != domain.KindMethod || method[0].Op != domain.OpChange || !method[0].Direct || method[0].Added != 1 {
+		t.Fatalf("the constant's method owns the change: %+v", method)
+	}
+	if method[0].Summary.Origin != domain.OriginNone {
+		t.Errorf("the method's change needs an explanation: %+v", method[0].Summary)
+	}
+	constant := allNamed(r, "Op.MINUS")
+	if len(constant) != 1 || constant[0].Direct || len(constant[0].Children) != 1 {
+		t.Errorf("the constant only contains the change: %+v", constant)
+	}
+	if len(allNamed(r, "Op.PLUS")) != 0 {
+		t.Error("an unchanged constant must not appear")
+	}
+}
+
 func TestJavaMethodRenameIsRecognized(t *testing.T) {
 	body := "(int[] xs) {\n        int t = 0;\n        for (int x : xs) t += x;\n        return t;\n    }\n"
 	s := repo(t,

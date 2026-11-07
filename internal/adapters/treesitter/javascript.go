@@ -109,7 +109,7 @@ func extractJS(ctx context.Context, tree *Tree, p string) (domain.FileAnalysis, 
 	root := tree.Root()
 	base := path.Base(p)
 	module := strings.TrimSuffix(base, path.Ext(base))
-	e := &jsExtractor{fileUnits{ctx: ctx, path: p, pkg: dirPackage(p), test: isJSTest(p)}}
+	e := &jsExtractor{newFileUnits(ctx, tree, p, dirPackage(p), isJSTest(p))}
 	owned := map[Node]bool{}
 	slot := e.reserve()
 	e.statements(root, jsScope{prefix: module, parent: module}, owned)
@@ -131,8 +131,6 @@ func extractJS(ctx context.Context, tree *Tree, p string) (domain.FileAnalysis, 
 // jsScope is where a declaration sits: prefix qualifies its name, and parent is the enclosing
 // unit. They differ inside a namespace, which qualifies names but is not a unit.
 type jsScope struct{ prefix, parent string }
-
-func (s jsScope) name(n string) string { return domain.QualifiedName(s.prefix, n) }
 
 type jsExtractor struct{ fileUnits }
 
@@ -189,7 +187,7 @@ func (e *jsExtractor) statement(outer, s Node, doc string, sc jsScope, owned map
 	case "ambient_declaration":
 		for _, c := range s.NamedChildren() {
 			if c.Type() == "statement_block" { // declare global { ... }
-				e.statements(c, jsScope{prefix: sc.name("global"), parent: sc.parent}, owned)
+				e.statements(c, jsScope{prefix: e.qualify(sc.prefix, "global"), parent: sc.parent}, owned)
 			} else {
 				e.statement(outer, c, doc, sc, owned)
 			}
@@ -213,7 +211,7 @@ func (e *jsExtractor) statement(outer, s Node, doc string, sc jsScope, owned map
 	case "type_alias_declaration":
 		e.add(domain.Unit{
 			Kind:      domain.KindType,
-			Name:      sc.name(s.ChildByField("name").Text()),
+			Name:      e.qualify(sc.prefix, s.ChildByField("name").Text()),
 			Parent:    sc.parent,
 			Signature: outer.Text(),
 			Hash:      jsHash(nil).hash(outer),
@@ -235,7 +233,7 @@ func (e *jsExtractor) namespace(n Node, sc jsScope, owned map[Node]bool) {
 	if body.IsNull() || name.IsNull() {
 		return
 	}
-	e.statements(body, jsScope{prefix: sc.name(jsName(name)), parent: sc.parent}, owned)
+	e.statements(body, jsScope{prefix: e.qualify(sc.prefix, jsName(name)), parent: sc.parent}, owned)
 }
 
 // defaultExport extracts `export default <value>`.
@@ -252,7 +250,7 @@ func (e *jsExtractor) defaultExport(outer, v Node, doc string, sc jsScope) {
 	default:
 		e.add(domain.Unit{
 			Kind:      domain.KindVar,
-			Name:      sc.name("default"),
+			Name:      e.qualify(sc.prefix, "default"),
 			Parent:    sc.parent,
 			Signature: outer.Text(),
 			Hash:      jsHash(nil).hash(outer),
@@ -271,7 +269,7 @@ func (e *jsExtractor) function(outer Node, decorators []Node, fn Node, name stri
 	body := fn.ChildByField("body")
 	u := domain.Unit{
 		Kind:      kind,
-		Name:      sc.name(name),
+		Name:      e.qualify(sc.prefix, name),
 		Parent:    sc.parent,
 		Signature: e.header(from, body, outer),
 		Hash:      jsHash(nil).hash(append(decorators, outer)...),
@@ -290,7 +288,7 @@ func (e *jsExtractor) function(outer Node, decorators []Node, fn Node, name stri
 // salted with its statement's own code.
 func (e *jsExtractor) class(span, hashed, cls Node, name, sigPrefix, doc, salt string, sc jsScope) {
 	slot := e.reserve()
-	qualified := sc.name(name)
+	qualified := e.qualify(sc.prefix, name)
 	members := map[Node]bool{}
 	body := cls.ChildByField("body")
 	e.classBody(body, jsScope{prefix: qualified, parent: qualified}, members)
@@ -358,7 +356,7 @@ func (e *jsExtractor) field(f, nameNode Node, decorators []Node, doc string, sc 
 	}
 	u := domain.Unit{
 		Kind:      domain.KindField,
-		Name:      sc.name(jsName(nameNode)),
+		Name:      e.qualify(sc.prefix, jsName(nameNode)),
 		Parent:    sc.parent,
 		Signature: from.TextUntil(f.EndByte()),
 		Hash:      jsHash(nil).hash(append(decorators, f)...),
@@ -385,7 +383,7 @@ func jsProvesRename(body Node) bool {
 // iface extracts an interface with its property and method signatures.
 func (e *jsExtractor) iface(outer, s Node, doc string, sc jsScope) {
 	slot := e.reserve()
-	qualified := sc.name(s.ChildByField("name").Text())
+	qualified := e.qualify(sc.prefix, s.ChildByField("name").Text())
 	inner := jsScope{prefix: qualified, parent: qualified}
 	members := map[Node]bool{}
 	body := s.ChildByField("body")
@@ -408,7 +406,7 @@ func (e *jsExtractor) iface(outer, s Node, doc string, sc jsScope) {
 		if kind != "" {
 			e.add(domain.Unit{
 				Kind:      kind,
-				Name:      inner.name(jsName(c.ChildByField("name"))),
+				Name:      e.qualify(inner.prefix, jsName(c.ChildByField("name"))),
 				Parent:    qualified,
 				Signature: c.Text(),
 				Hash:      jsHash(nil).hash(c),
@@ -435,7 +433,7 @@ func (e *jsExtractor) iface(outer, s Node, doc string, sc jsScope) {
 // re-initializing members changes every member whose value moves, and appending changes none.
 func (e *jsExtractor) enum(outer, s Node, doc string, sc jsScope) {
 	slot := e.reserve()
-	qualified := sc.name(s.ChildByField("name").Text())
+	qualified := e.qualify(sc.prefix, s.ChildByField("name").Text())
 	members := map[Node]bool{}
 	previous := ""
 	body := s.ChildByField("body")
@@ -455,7 +453,7 @@ func (e *jsExtractor) enum(outer, s Node, doc string, sc jsScope) {
 		previous = hash
 		e.add(domain.Unit{
 			Kind:      domain.KindEnumMember,
-			Name:      domain.QualifiedName(qualified, name),
+			Name:      e.qualify(qualified, name),
 			Parent:    qualified,
 			Signature: c.Text(),
 			Hash:      hash,
@@ -507,7 +505,7 @@ func (e *jsExtractor) variables(outer, s Node, doc string, sc jsScope, owned map
 		if nameNode.Type() == "identifier" && jsIsFunction(value) {
 			u := domain.Unit{
 				Kind:      domain.KindFunction,
-				Name:      sc.name(nameNode.Text()),
+				Name:      e.qualify(sc.prefix, nameNode.Text()),
 				Parent:    sc.parent,
 				Signature: sigPrefix + e.header(span, value.ChildByField("body"), span),
 				Hash:      hashStrings(statement, jsHash(nil).hash(d)),
@@ -540,7 +538,7 @@ func (e *jsExtractor) bindings(span, decl Node, names []string, sigPrefix, doc, 
 	for _, n := range names {
 		e.units = append(e.units, e.finish(domain.Unit{
 			Kind:      domain.KindVar,
-			Name:      sc.name(n),
+			Name:      e.qualify(sc.prefix, n),
 			Parent:    sc.parent,
 			Signature: signature,
 			Hash:      hashStrings(n, code),

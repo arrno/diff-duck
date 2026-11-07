@@ -127,6 +127,14 @@ func TestStructuralNodesCostNoModelCall(t *testing.T) {
 	if len(m.requests) != 0 {
 		t.Fatalf("calls: %d", len(m.requests))
 	}
+	// Leaves whose signature says everything are explained by the differ, never the model.
+	for _, kind := range []domain.UnitKind{domain.KindField, domain.KindConst, domain.KindEnumMember, domain.KindStruct} {
+		leaf := &domain.Node{ID: "leaf", Kind: kind, Op: domain.OpAdd, Direct: true, Signature: "X = 1"}
+		explainUnit(leaf)
+		if m, _ := compress(t, summarizeAll, leaf); len(m.requests) != 0 {
+			t.Errorf("%s: calls: %d", kind, len(m.requests))
+		}
+	}
 }
 
 func TestUnusableModelOutputLeavesNodesVisiblyUnexplained(t *testing.T) {

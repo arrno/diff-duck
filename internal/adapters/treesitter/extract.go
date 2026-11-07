@@ -39,18 +39,43 @@ func dirPackage(p string) domain.PackageRef {
 }
 
 // fileUnits collects one file's units, in source order, and stamps each with what every unit
-// of the file shares.
+// of the file shares. Build it with newFileUnits: its zero value has no name budget and
+// refuses every file.
 type fileUnits struct {
 	ctx   context.Context
 	path  string
 	pkg   domain.PackageRef
 	test  bool // the whole file holds tests
 	units []domain.Unit
+	// names is what qualified names may still allocate. Each nesting level repeats its
+	// enclosing names, so deliberately nested code could otherwise turn a small file into
+	// gigabytes of names. Negative means exhausted, and extraction stops.
+	names int
 }
 
-// stopped reports whether the caller has given up on the analysis. Extraction checks it once
-// per declaration it visits, so a cancelled diff stops promptly even on a large file.
-func (f *fileUnits) stopped() bool { return f.ctx.Err() != nil }
+// newFileUnits starts collecting the units of the file at p, whose text is tree's.
+func newFileUnits(ctx context.Context, tree *Tree, p string, pkg domain.PackageRef, test bool) fileUnits {
+	return fileUnits{ctx: ctx, path: p, pkg: pkg, test: test, names: nameBudget(len(tree.Text()))}
+}
+
+// nameBudget bounds the bytes of qualified names one file may produce: far more than real
+// code needs, and linear in the file's size.
+func nameBudget(size int) int { return 1<<20 + 32*size }
+
+// qualify names a declaration inside scope, charging the name to the file's budget. Once the
+// budget is spent it returns "" and extraction stops.
+func (f *fileUnits) qualify(scope, name string) string {
+	f.names -= len(scope) + 1 + len(name)
+	if f.names < 0 {
+		return ""
+	}
+	return domain.QualifiedName(scope, name)
+}
+
+// stopped reports whether extraction must end: the caller gave up on the analysis, or the
+// file's names outgrew their budget. Extraction checks it once per declaration it visits, so
+// a cancelled diff stops promptly even on a large file.
+func (f *fileUnits) stopped() bool { return f.names < 0 || f.ctx.Err() != nil }
 
 // reserve holds a place for a unit whose hash depends on its members, which come first.
 func (f *fileUnits) reserve() int {
@@ -72,6 +97,9 @@ func (f *fileUnits) finish(u domain.Unit) domain.Unit {
 func (f *fileUnits) analysis(a domain.FileAnalysis) (domain.FileAnalysis, error) {
 	if err := f.ctx.Err(); err != nil {
 		return domain.FileAnalysis{}, fmt.Errorf("analyze %s: %w", f.path, err)
+	}
+	if f.names < 0 {
+		return domain.FileAnalysis{}, fmt.Errorf("parse %s: %w: its qualified names grow far beyond its size", f.path, ErrTooLarge)
 	}
 	a.Units = f.units
 	a.Test = f.test

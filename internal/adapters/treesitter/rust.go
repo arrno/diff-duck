@@ -91,12 +91,7 @@ func extractRust(ctx context.Context, tree *Tree, p string) (domain.FileAnalysis
 	root := tree.Root()
 	module := strings.TrimSuffix(path.Base(p), ".rs")
 	constraints, constraintNodes := rsConstraints(root)
-	e := &rsExtractor{fileUnits{
-		ctx:  ctx,
-		path: p,
-		pkg:  dirPackage(p),
-		test: rsIsTestPath(p) || rsHasCfgTest(constraintNodes),
-	}}
+	e := &rsExtractor{newFileUnits(ctx, tree, p, dirPackage(p), rsIsTestPath(p) || rsHasCfgTest(constraintNodes))}
 	owned := map[Node]bool{}
 	for _, c := range constraintNodes {
 		owned[c] = true
@@ -259,7 +254,7 @@ func (e *rsExtractor) items(container Node, scope rsScope, owned map[Node]bool) 
 			}
 			e.units = append(e.units, e.place(domain.Unit{
 				Kind:      domain.KindFunction,
-				Name:      domain.QualifiedName(scope.name, name.Text()+"!"),
+				Name:      e.qualify(scope.name, name.Text()+"!"),
 				Parent:    scope.parent,
 				Signature: rsAttrText(it) + "macro_rules! " + name.Text(),
 				Hash:      it.hash(nil),
@@ -271,7 +266,7 @@ func (e *rsExtractor) items(container Node, scope rsScope, owned map[Node]bool) 
 			if body.IsNull() || name.IsNull() {
 				continue
 			}
-			e.items(body, rsScope{name: domain.QualifiedName(scope.name, name.Text()), parent: scope.parent, test: test}, owned)
+			e.items(body, rsScope{name: e.qualify(scope.name, name.Text()), parent: scope.parent, test: test}, owned)
 		}
 	}
 }
@@ -286,7 +281,7 @@ func (e *rsExtractor) function(it rsItem, scope, parent string, kind domain.Unit
 	body := n.ChildByField("body")
 	u := domain.Unit{
 		Kind:      kind,
-		Name:      domain.QualifiedName(scope, nameNode.Text()+"()"),
+		Name:      e.qualify(scope, nameNode.Text()+"()"),
 		Parent:    parent,
 		Signature: rsAttrText(it) + rsHeader(n, body),
 		Hash:      it.hash(nil),
@@ -308,7 +303,7 @@ func (e *rsExtractor) simple(it rsItem, scope, parent string, kind domain.UnitKi
 	}
 	e.units = append(e.units, e.place(domain.Unit{
 		Kind:      kind,
-		Name:      domain.QualifiedName(scope, nameNode.Text()),
+		Name:      e.qualify(scope, nameNode.Text()),
 		Parent:    parent,
 		Signature: rsAttrText(it) + strings.TrimSuffix(it.node.Text(), ";"),
 		Hash:      it.hash(nil),
@@ -329,7 +324,7 @@ func (e *rsExtractor) structure(it rsItem, scope rsScope, test bool) {
 	if nameNode.IsNull() {
 		return
 	}
-	name := domain.QualifiedName(scope.name, nameNode.Text())
+	name := e.qualify(scope.name, nameNode.Text())
 	body := n.ChildByField("body")
 	slot := e.reserve()
 	members := map[Node]bool{}
@@ -369,7 +364,7 @@ func (e *rsExtractor) field(it rsItem, parent, short string, nodes []Node, test 
 	last := nodes[len(nodes)-1]
 	u := domain.Unit{
 		Kind:      domain.KindField,
-		Name:      domain.QualifiedName(parent, short),
+		Name:      e.qualify(parent, short),
 		Parent:    parent,
 		Signature: rsAttrText(it) + nodes[0].TextUntil(last.EndByte()),
 		Hash:      it.hash(nil, nodes...),
@@ -430,7 +425,7 @@ func (e *rsExtractor) enum(it rsItem, scope rsScope, test bool) {
 	if nameNode.IsNull() {
 		return
 	}
-	name := domain.QualifiedName(scope.name, nameNode.Text())
+	name := e.qualify(scope.name, nameNode.Text())
 	body := n.ChildByField("body")
 	slot := e.reserve()
 	members := map[Node]bool{}
@@ -444,7 +439,7 @@ func (e *rsExtractor) enum(it rsItem, scope rsScope, test bool) {
 		}
 		e.units = append(e.units, e.place(domain.Unit{
 			Kind:      domain.KindEnumMember,
-			Name:      domain.QualifiedName(name, vname.Text()),
+			Name:      e.qualify(name, vname.Text()),
 			Parent:    name,
 			Signature: rsAttrText(v) + v.node.Text(),
 			Hash:      v.hash(nil),
@@ -470,7 +465,7 @@ func (e *rsExtractor) trait(it rsItem, scope rsScope, test bool) {
 	if nameNode.IsNull() {
 		return
 	}
-	name := domain.QualifiedName(scope.name, nameNode.Text())
+	name := e.qualify(scope.name, nameNode.Text())
 	body := n.ChildByField("body")
 	slot := e.reserve()
 	members := map[Node]bool{}
@@ -493,7 +488,7 @@ func (e *rsExtractor) impl(it rsItem, scope rsScope, local map[string]bool, test
 	if body.IsNull() || typeName == "" {
 		return
 	}
-	typeScope := domain.QualifiedName(scope.name, typeName)
+	typeScope := e.qualify(scope.name, typeName)
 	parent := scope.parent
 	// impl<T> Show for T is a blanket impl, even beside a struct named T.
 	if plain && local[typeName] && !rsDeclaresTypeParam(n.ChildByField("type_parameters"), typeName) {
@@ -501,7 +496,7 @@ func (e *rsExtractor) impl(it rsItem, scope rsScope, local map[string]bool, test
 	}
 	itemScope := typeScope
 	if trait := n.ChildByField("trait"); !trait.IsNull() {
-		itemScope = domain.QualifiedName(typeScope, "<"+rsTypeName(trait)+">")
+		itemScope = e.qualify(typeScope, "<"+rsTypeName(trait)+">")
 	}
 	e.associated(body, itemScope, parent, test, owned, domain.KindMethod)
 }

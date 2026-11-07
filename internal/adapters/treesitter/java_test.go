@@ -117,6 +117,7 @@ func TestJavaUnitsNamesKindsNestingAndLines(t *testing.T) {
 		"Store.putAll()":                         {domain.KindMethod, "Store", 35, 35},
 		"Color":                                  {domain.KindEnum, "", 38, 48},
 		"Color.RED":                              {domain.KindEnumMember, "Color", 39, 42},
+		"Color.RED.code()":                       {domain.KindMethod, "Color.RED", 41, 41},
 		"Color.GREEN":                            {domain.KindEnumMember, "Color", 43, 43},
 		"Color.tag":                              {domain.KindField, "Color", 45, 45},
 		"Color.Color(String)":                    {domain.KindMethod, "Color", 46, 46},
@@ -192,7 +193,7 @@ func TestJavaPackageWithoutDeclaration(t *testing.T) {
 func TestJavaAnonymousAndLocalClassesStayInsideTheirMethod(t *testing.T) {
 	got := unitsByName(analyzeJava(t, newTestRuntime(t), "Repo.java", javaSample))
 	for name := range got {
-		if strings.Contains(name, "Local") || strings.HasPrefix(name, "Repo.run(String...).") || strings.HasPrefix(name, "Color.RED.") {
+		if strings.Contains(name, "Local") || strings.HasPrefix(name, "Repo.run(String...).") {
 			t.Errorf("unexpected unit %s", name)
 		}
 	}
@@ -376,7 +377,9 @@ func TestJavaMemberHashesCoverTheirDeclaration(t *testing.T) {
 		"class A { @Deprecated int a; }", "class A { int a[]; }")
 	differs("E.RED",
 		"enum E { RED(\"r\") }", "enum E { RED(\"s\") }",
-		"enum E { RED(\"r\") { int code() { return 1; } } }", "enum E { RED(\"r\") { int code() { return 2; } } }")
+		"enum E { RED(\"r\") { int code() { return 1; } } }", "enum E { RED(\"r\") { { init(); } int code() { return 1; } } }")
+	differs("E.RED.code()",
+		"enum E { RED { int code() { return 1; } } }", "enum E { RED { int code() { return 2; } } }")
 	differs("P.x",
 		"record P(int x) {}", "record P(long x) {}", "record P(@Deprecated int x) {}")
 }

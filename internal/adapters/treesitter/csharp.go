@@ -87,18 +87,9 @@ func (a *CSharp) Analyze(ctx context.Context, p string, src []byte) (domain.File
 func extractCSharp(ctx context.Context, tree *Tree, p string) (domain.FileAnalysis, error) {
 	root := tree.Root()
 	e := &csExtractor{
-		fileUnits: fileUnits{
-			ctx:  ctx,
-			path: p,
-			pkg:  dirPackage(p),
-			test: isCSharpTestPath(p) || csUsesTestAttributes(tree),
-		},
-		nameBytes: csNameBudget(len(tree.Text())),
+		fileUnits: newFileUnits(ctx, tree, p, dirPackage(p), isCSharpTestPath(p) || csUsesTestAttributes(tree)),
 	}
 	e.scope(root, "", "", false, map[Node]bool{})
-	if e.nameBytes < 0 {
-		return domain.FileAnalysis{}, fmt.Errorf("parse %s: %w: its qualified names grow far beyond its size", p, ErrTooLarge)
-	}
 	return e.analysis(domain.FileAnalysis{
 		Package:   e.pkgOf(e.firstNS),
 		Generated: isCSharpGenerated(p, root),
@@ -109,27 +100,14 @@ func extractCSharp(ctx context.Context, tree *Tree, p string) (domain.FileAnalys
 type csExtractor struct {
 	fileUnits
 	firstNS string // the first namespace the file declares
-	// nameBytes is what qualified names may still allocate. Each nesting level repeats its
-	// enclosing names, so deliberately nested code could otherwise turn a small file into
-	// gigabytes of names. Negative means exhausted, and extraction stops.
-	nameBytes int
 }
 
-// csNameBudget bounds the bytes of qualified names one file may produce: far more than real
-// code needs, and linear in the file's size.
-func csNameBudget(size int) int { return 1<<20 + 32*size }
-
-// qualify names a declaration inside a type, charging the name to the budget.
+// qualify names a declaration inside a type; a top-level type has its simple name.
 func (e *csExtractor) qualify(scope, name string) string {
 	if scope == "" {
-		e.nameBytes -= len(name)
 		return name
 	}
-	e.nameBytes -= len(scope) + 1 + len(name)
-	if e.nameBytes < 0 {
-		return ""
-	}
-	return domain.QualifiedName(scope, name)
+	return e.fileUnits.qualify(scope, name)
 }
 
 // pkgOf returns the package of a namespace; the global namespace is named after the directory.
@@ -191,16 +169,16 @@ func (e *csExtractor) scope(container Node, ns, typeName string, inInterface boo
 	names := csMemberNames(decls)
 	var globals []Node
 	for _, d := range decls {
-		if e.nameBytes < 0 || e.stopped() {
+		if e.stopped() {
 			return
 		}
 		n := d.node
 		switch n.Type() {
 		case "file_scoped_namespace_declaration":
-			ns = csNamespace(ns, n)
+			ns = e.namespace(ns, n)
 			e.noteNamespace(ns)
 		case "namespace_declaration":
-			inner := csNamespace(ns, n)
+			inner := e.namespace(ns, n)
 			e.noteNamespace(inner)
 			e.scope(n.ChildByField("body"), inner, "", false, map[Node]bool{})
 		case "global_statement":
@@ -301,7 +279,7 @@ func (e *csExtractor) enumMembers(body Node, ns, enum string, owned map[Node]boo
 			break
 		}
 		n := d.node
-		if n.Type() != "enum_member_declaration" || e.nameBytes < 0 {
+		if n.Type() != "enum_member_declaration" || e.stopped() {
 			continue
 		}
 		u := domain.Unit{
@@ -378,7 +356,7 @@ func (e *csExtractor) fields(d csDecl, ns, scope string) {
 	// square of the declaration's length.
 	signature := compact(strings.TrimSuffix(n.Text(), ";"))
 	for _, v := range decl.NamedChildren() {
-		if v.Type() != "variable_declarator" || e.nameBytes < 0 {
+		if v.Type() != "variable_declarator" || e.stopped() {
 			continue
 		}
 		name := v.ChildByField("name").Text()
@@ -601,13 +579,10 @@ func csParamNames(params Node) string {
 	return strings.Join(names, ",")
 }
 
-// csNamespace returns the namespace a declaration opens inside an outer one.
-func csNamespace(outer string, n Node) string {
-	name := csTokens(n.ChildByField("name"))
-	if outer == "" {
-		return name
-	}
-	return outer + "." + name
+// namespace returns the namespace a declaration opens inside an outer one. Nested names repeat
+// their outer ones, so they are charged to the file's name budget like any qualified name.
+func (e *csExtractor) namespace(outer string, n Node) string {
+	return e.qualify(outer, csTokens(n.ChildByField("name")))
 }
 
 // csHeader returns a declaration's text up to its body: attributes, modifiers, name, type and

@@ -45,7 +45,7 @@ func (a *Python) Analyze(ctx context.Context, p string, src []byte) (domain.File
 func extractPython(ctx context.Context, tree *Tree, p string) (domain.FileAnalysis, error) {
 	root := tree.Root()
 	module := strings.TrimSuffix(path.Base(p), ".py")
-	e := &pyExtractor{fileUnits{ctx: ctx, path: p, pkg: dirPackage(p), test: isPythonTest(p)}}
+	e := &pyExtractor{newFileUnits(ctx, tree, p, dirPackage(p), isPythonTest(p))}
 	owned := map[Node]bool{}
 	slot := e.reserve()
 	e.statements(root, module, false, owned)
@@ -97,7 +97,7 @@ func (e *pyExtractor) statements(block Node, scope string, inClass bool, owned m
 			if name := pyTypeAliasName(s); name != "" {
 				e.add(domain.Unit{
 					Kind:      domain.KindType,
-					Name:      domain.QualifiedName(scope, name),
+					Name:      e.qualify(scope, name),
 					Parent:    scope,
 					Signature: s.Text(),
 					Hash:      pyHash(nil).hash(s),
@@ -128,7 +128,7 @@ func (e *pyExtractor) definition(outer, def Node, scope string, inClass bool) {
 	if nameNode.IsNull() {
 		return
 	}
-	name := domain.QualifiedName(scope, nameNode.Text())
+	name := e.qualify(scope, nameNode.Text())
 	body := def.ChildByField("body")
 	decorators := pyDecoratorText(outer)
 	switch def.Type() {
@@ -194,7 +194,7 @@ func (e *pyExtractor) assignment(s Node, names []string, scope string, inClass b
 	for _, n := range names {
 		e.units = append(e.units, e.finish(domain.Unit{
 			Kind:      kind,
-			Name:      domain.QualifiedName(scope, n),
+			Name:      e.qualify(scope, n),
 			Parent:    scope,
 			Signature: signature,
 			Hash:      hashStrings(n, code),
