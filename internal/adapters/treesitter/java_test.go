@@ -105,30 +105,30 @@ func TestJavaUnitsNamesKindsNestingAndLines(t *testing.T) {
 		"Repo.Repo(String)":                      {domain.KindMethod, "Repo", 17, 17},
 		"Repo.find(String)":                      {domain.KindMethod, "Repo", 19, 19},
 		"Repo.find(int,Map<String,? extends T>)": {domain.KindMethod, "Repo", 20, 20},
-		"Repo.run":                               {domain.KindMethod, "Repo", 21, 24},
+		"Repo.run(String...)":                    {domain.KindMethod, "Repo", 21, 24},
 		"Repo.Inner":                             {domain.KindClass, "Repo", 26, 29},
-		"Repo.Inner.close":                       {domain.KindMethod, "Repo.Inner", 27, 27},
+		"Repo.Inner.close()":                     {domain.KindMethod, "Repo.Inner", 27, 27},
 		"Repo.Inner.Mode":                        {domain.KindEnum, "Repo.Inner", 28, 28},
 		"Repo.Inner.Mode.ON":                     {domain.KindEnumMember, "Repo.Inner.Mode", 28, 28},
 		"Repo.Inner.Mode.OFF":                    {domain.KindEnumMember, "Repo.Inner.Mode", 28, 28},
 		"Store":                                  {domain.KindInterface, "", 32, 36},
 		"Store.LIMIT":                            {domain.KindConst, "Store", 33, 33},
-		"Store.put":                              {domain.KindInterfaceMethod, "Store", 34, 34},
-		"Store.putAll":                           {domain.KindMethod, "Store", 35, 35},
+		"Store.put(Object)":                      {domain.KindInterfaceMethod, "Store", 34, 34},
+		"Store.putAll()":                         {domain.KindMethod, "Store", 35, 35},
 		"Color":                                  {domain.KindEnum, "", 38, 48},
 		"Color.RED":                              {domain.KindEnumMember, "Color", 39, 42},
 		"Color.GREEN":                            {domain.KindEnumMember, "Color", 43, 43},
 		"Color.tag":                              {domain.KindField, "Color", 45, 45},
-		"Color.Color":                            {domain.KindMethod, "Color", 46, 46},
-		"Color.code":                             {domain.KindMethod, "Color", 47, 47},
+		"Color.Color(String)":                    {domain.KindMethod, "Color", 46, 46},
+		"Color.code()":                           {domain.KindMethod, "Color", 47, 47},
 		"Point":                                  {domain.KindRecord, "", 50, 56},
 		"Point.x":                                {domain.KindField, "Point", 50, 50},
 		"Point.y":                                {domain.KindField, "Point", 50, 50},
 		"Point.Point(int,int)":                   {domain.KindMethod, "Point", 51, 53},
 		"Point.Point(int)":                       {domain.KindMethod, "Point", 54, 54},
-		"Point.put":                              {domain.KindMethod, "Point", 55, 55},
+		"Point.put(Object)":                      {domain.KindMethod, "Point", 55, 55},
 		"Tag":                                    {domain.KindInterface, "", 58, 61},
-		"Tag.value":                              {domain.KindInterfaceMethod, "Tag", 59, 59},
+		"Tag.value()":                            {domain.KindInterfaceMethod, "Tag", 59, 59},
 		"Tag.LEVEL":                              {domain.KindConst, "Tag", 60, 60},
 	}
 	got := unitsByName(a)
@@ -170,7 +170,7 @@ func TestJavaUnitsNamesKindsNestingAndLines(t *testing.T) {
 	if sig := got["Repo.MAX"].Signature; sig != "static final int MAX" {
 		t.Errorf("field signature %q", sig)
 	}
-	if sig := got["Store.put"].Signature; sig != "void put(Object o)" {
+	if sig := got["Store.put(Object)"].Signature; sig != "void put(Object o)" {
 		t.Errorf("interface method signature %q", sig)
 	}
 }
@@ -192,24 +192,27 @@ func TestJavaPackageWithoutDeclaration(t *testing.T) {
 func TestJavaAnonymousAndLocalClassesStayInsideTheirMethod(t *testing.T) {
 	got := unitsByName(analyzeJava(t, newTestRuntime(t), "Repo.java", javaSample))
 	for name := range got {
-		if strings.Contains(name, "Local") || strings.HasPrefix(name, "Repo.run.") || strings.HasPrefix(name, "Color.RED.") {
+		if strings.Contains(name, "Local") || strings.HasPrefix(name, "Repo.run(String...).") || strings.HasPrefix(name, "Color.RED.") {
 			t.Errorf("unexpected unit %s", name)
 		}
 	}
-	if !strings.Contains(got["Repo.run"].Source, "class Local") {
+	if !strings.Contains(got["Repo.run(String...)"].Source, "class Local") {
 		t.Error("a local class is part of its method's code")
 	}
 }
 
 func TestJavaOverloadNamesAreStable(t *testing.T) {
 	rt := newTestRuntime(t)
+	// A method's name does not depend on its siblings: adding an overload, or a field of the
+	// same name, leaves it alone.
 	one := unitsByName(analyzeJava(t, rt, "A.java", "class A { int f(int x) { return x; } }"))
-	if _, ok := one["A.f"]; !ok {
-		t.Fatalf("a method that is not overloaded keeps its plain name: %v", one)
+	two := unitsByName(analyzeJava(t, rt, "A.java", "class A { int f; int f(int x) { return x; } int f(long x) { return 1; } }"))
+	if one["A.f(int)"].Hash == "" || one["A.f(int)"].Hash != two["A.f(int)"].Hash {
+		t.Errorf("adding an overload renamed or changed the existing one: %v / %v", one, two)
 	}
 	// Formatting and parameter names do not change an overload's name.
 	a := unitsByName(analyzeJava(t, rt, "A.java", "class A { void f(int x) {} void f(java.util.Map<String,Integer> m, int[] xs, String... r) {} }"))
-	b := unitsByName(analyzeJava(t, rt, "A.java", "class A { void f(int y) {}\n void f(java.util.Map< String , Integer > n, int ys[], String ... s) {} }"))
+	b := unitsByName(analyzeJava(t, rt, "A.java", "class A { void f(int y) {}\n void f(java.util.Map< String , /* c */ Integer > n, int ys[], String ... s) {} }"))
 	for _, name := range []string{"A.f(int)", "A.f(java.util.Map<String,Integer>,int[],String...)"} {
 		if _, ok := a[name]; !ok {
 			t.Errorf("missing %s in %v", name, a)
@@ -217,6 +220,46 @@ func TestJavaOverloadNamesAreStable(t *testing.T) {
 		if _, ok := b[name]; !ok {
 			t.Errorf("missing %s after reformatting in %v", name, b)
 		}
+	}
+}
+
+func TestJavaMethodSharingAFieldsNameIsDistinct(t *testing.T) {
+	a := analyzeJava(t, newTestRuntime(t), "A.java", `class A {
+    private int size;
+    int size() { return size; }
+    static final int MAX = 1;
+    int MAX(int x) { return x; }
+    class Inner {}
+    void Inner() {}
+    int plain() { return 0; }
+}
+record R(int a, String... rest) {
+    public int a() { return a; }
+}
+`)
+	seen := map[string]domain.UnitKind{}
+	for _, u := range a.Units {
+		if k, dup := seen[u.Name]; dup {
+			t.Errorf("%s names both a %s and a %s", u.Name, k, u.Kind)
+		}
+		seen[u.Name] = u.Kind
+	}
+	for name, kind := range map[string]domain.UnitKind{
+		"A.size": domain.KindField, "A.size()": domain.KindMethod,
+		"A.MAX": domain.KindConst, "A.MAX(int)": domain.KindMethod,
+		"A.Inner": domain.KindClass, "A.Inner()": domain.KindMethod,
+		"A.plain()": domain.KindMethod,
+		"R.a":       domain.KindField, "R.a()": domain.KindMethod, "R.rest": domain.KindField,
+	} {
+		if seen[name] != kind {
+			t.Errorf("%s: got kind %q, want %s (units %v)", name, seen[name], kind, seen)
+		}
+	}
+	// A varargs component is a component like any other.
+	r1 := unitsByName(analyzeJava(t, newTestRuntime(t), "R.java", "record R(int a, String... rest) {}"))
+	r2 := unitsByName(analyzeJava(t, newTestRuntime(t), "R.java", "record R(int a, Object... rest) {}"))
+	if r1["R.rest"].Hash == r2["R.rest"].Hash || r1["R.rest"].StartLine != 1 {
+		t.Errorf("varargs component: %+v", r1["R.rest"])
 	}
 }
 
@@ -241,12 +284,12 @@ func TestJavaHashIgnoresFormattingAndComments(t *testing.T) {
 }
 `
 	a, b := unitsByName(analyzeJava(t, rt, "A.java", base)), unitsByName(analyzeJava(t, rt, "A.java", reformatted))
-	for _, name := range []string{"A", "A.f", "A.xs"} {
+	for _, name := range []string{"A", "A.f(int)", "A.xs"} {
 		if a[name].Hash != b[name].Hash {
 			t.Errorf("%s: formatting and comments changed the hash", name)
 		}
 	}
-	if a["A.f"].BodyHash != "" {
+	if a["A.f(int)"].BodyHash != "" {
 		t.Error("a one-statement body cannot prove a rename")
 	}
 }
@@ -254,7 +297,7 @@ func TestJavaHashIgnoresFormattingAndComments(t *testing.T) {
 func TestJavaHashCountsLiteralContents(t *testing.T) {
 	rt := newTestRuntime(t)
 	hash := func(body string) string {
-		return unitsByName(analyzeJava(t, rt, "A.java", "class A { void f() { "+body+" } }"))["A.f"].Hash
+		return unitsByName(analyzeJava(t, rt, "A.java", "class A { void f() { "+body+" } }"))["A.f()"].Hash
 	}
 	pairs := [][2]string{
 		{`String s = "a b";`, `String s = "a  b";`},
@@ -276,12 +319,66 @@ func TestJavaAnnotationsAndModifiersCount(t *testing.T) {
 	a := unitsByName(analyzeJava(t, rt, "A.java", "class A { void f() {} }"))
 	b := unitsByName(analyzeJava(t, rt, "A.java", "class A { @Deprecated void f() {} }"))
 	c := unitsByName(analyzeJava(t, rt, "A.java", "class A { synchronized void f() {} }"))
-	if a["A.f"].Hash == b["A.f"].Hash || a["A.f"].Hash == c["A.f"].Hash {
+	if a["A.f()"].Hash == b["A.f()"].Hash || a["A.f()"].Hash == c["A.f()"].Hash {
 		t.Error("annotations and modifiers are code")
 	}
 	if a["A"].Hash != b["A"].Hash {
 		t.Error("a member's change belongs to the member, not its class")
 	}
+}
+
+func TestJavaOnlyStaticFinalFieldsAreConstants(t *testing.T) {
+	got := unitsByName(analyzeJava(t, newTestRuntime(t), "A.java", "class A { static int count; final int id = 1; static final int MAX = 2; }"))
+	for name, kind := range map[string]domain.UnitKind{"A.count": domain.KindField, "A.id": domain.KindField, "A.MAX": domain.KindConst} {
+		if got[name].Kind != kind {
+			t.Errorf("%s: got %s, want %s", name, got[name].Kind, kind)
+		}
+	}
+}
+
+// Nested types share the file's text instead of copying it once per level of nesting.
+func TestJavaNestedTypesShareText(t *testing.T) {
+	const depth = 50
+	src := strings.Repeat("class A {\n", depth) + strings.Repeat("}\n", depth)
+	a := analyzeJava(t, newTestRuntime(t), "A.java", src)
+	if len(a.Units) != depth {
+		t.Fatalf("got %d units", len(a.Units))
+	}
+	outer := a.Units[0].Source
+	lo := uintptr(unsafe.Pointer(unsafe.StringData(outer)))
+	for _, u := range a.Units[1:] {
+		p := uintptr(unsafe.Pointer(unsafe.StringData(u.Source)))
+		if p < lo || p+uintptr(len(u.Source)) > lo+uintptr(len(outer)) {
+			t.Fatalf("%s copies its text", u.Name)
+		}
+	}
+}
+
+// Every kind of member counts its whole declaration, not just its name.
+func TestJavaMemberHashesCoverTheirDeclaration(t *testing.T) {
+	rt := newTestRuntime(t)
+	differs := func(name string, srcs ...string) {
+		t.Helper()
+		seen := map[string]string{}
+		for _, src := range srcs {
+			u, ok := unitsByName(analyzeJava(t, rt, "A.java", src))[name]
+			if !ok {
+				t.Fatalf("%s missing in %q", name, src)
+			}
+			if prev, dup := seen[u.Hash]; dup {
+				t.Errorf("%s hashes the same in %q and %q", name, prev, src)
+			}
+			seen[u.Hash] = src
+		}
+	}
+	differs("A.a",
+		"class A { int a; }", "class A { long a; }", "class A { private int a; }",
+		"class A { @Deprecated int a; }", "class A { int a[]; }")
+	differs("E.RED",
+		"enum E { RED(\"r\") }", "enum E { RED(\"s\") }",
+		"enum E { RED(\"r\") { int code() { return 1; } } }", "enum E { RED(\"r\") { int code() { return 2; } } }")
+	differs("P.x",
+		"record P(int x) {}", "record P(long x) {}", "record P(@Deprecated int x) {}")
 }
 
 func TestJavaTypeHashCoversOwnCodeOnly(t *testing.T) {
@@ -312,11 +409,21 @@ func TestJavaBodyHashSurvivesRename(t *testing.T) {
 	a := unitsByName(analyzeJava(t, rt, "A.java", "class A { int sum(int[] xs) "+body+" }"))
 	b := unitsByName(analyzeJava(t, rt, "A.java", "class A { int total(int[] xs) "+body+" }"))
 	c := unitsByName(analyzeJava(t, rt, "A.java", "class A { long total(int[] xs) "+body+" }"))
-	if a["A.sum"].BodyHash == "" || a["A.sum"].BodyHash != b["A.total"].BodyHash {
+	if a["A.sum(int[])"].BodyHash == "" || a["A.sum(int[])"].BodyHash != b["A.total(int[])"].BodyHash {
 		t.Error("a renamed method with an identical body keeps its body hash")
 	}
-	if a["A.sum"].BodyHash == c["A.total"].BodyHash {
+	if a["A.sum(int[])"].BodyHash == c["A.total(int[])"].BodyHash {
 		t.Error("the result type is part of the body hash")
+	}
+	// A parameter's type is in the name, so a changed type with an identical body is followed
+	// through the body hash; a renamed parameter is a different body.
+	d := unitsByName(analyzeJava(t, rt, "A.java", "class A { int sum(Integer[] xs) "+body+" }"))
+	e := unitsByName(analyzeJava(t, rt, "A.java", "class A { int sum(int[] ys) "+body+" }"))
+	if a["A.sum(int[])"].BodyHash != d["A.sum(Integer[])"].BodyHash {
+		t.Error("a parameter type change with an identical body keeps its body hash")
+	}
+	if a["A.sum(int[])"].BodyHash == e["A.sum(int[])"].BodyHash {
+		t.Error("parameter names are part of the body hash")
 	}
 }
 
@@ -395,6 +502,11 @@ func TestJavaTestAndGeneratedDetection(t *testing.T) {
 		"@javax.annotation.Generated(value = \"x\")\npublic class X {}\n":                  true,
 		"// Hand written.\nclass X {}\n":                                                   false,
 		"class X { @Generated void f() {} }\n":                                             false,
+		"// Generated. DO NOT MODIFY.\nclass X {}\n":                                       true,
+		"@Generated\nclass X {}\n@Generated\nclass Y {}\n":                                 true,
+		"class A {}\n// Generated code, do not edit\nclass B {}\n":                         false,
+		// One annotated type does not hide the hand-written types beside it.
+		"class Auth {}\n@Generated\nclass Z {}\n": false,
 	} {
 		if got := analyzeJava(t, rt, "X.java", src).Generated; got != want {
 			t.Errorf("%q: generated=%v, want %v", src, got, want)

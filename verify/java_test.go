@@ -97,19 +97,17 @@ func TestJavaChangesBecomeCodeUnits(t *testing.T) {
 	wants := map[string]want{
 		"CartRepo":                  {domain.KindClass, domain.OpChange, main + " > CartRepo", 5, 27, false},
 		"CartRepo.owner":            {domain.KindField, domain.OpAdd, main + " > CartRepo > CartRepo.owner", 8, 8, true},
-		"CartRepo.CartRepo()":       {domain.KindMethod, domain.OpAdd, main + " > CartRepo > CartRepo.CartRepo()", 10, 10, true},
 		"CartRepo.CartRepo(String)": {domain.KindMethod, domain.OpAdd, main + " > CartRepo > CartRepo.CartRepo(String)", 12, 14, true},
-		"CartRepo.CartRepo":         {domain.KindMethod, domain.OpRemove, main + " > CartRepo > CartRepo.CartRepo", 9, 9, true},
-		"CartRepo.count":            {domain.KindMethod, domain.OpChange, main + " > CartRepo > CartRepo.count", 16, 18, true},
-		"CartRepo.obsolete":         {domain.KindMethod, domain.OpRemove, main + " > CartRepo > CartRepo.obsolete", 15, 17, true},
+		"CartRepo.count()":          {domain.KindMethod, domain.OpChange, main + " > CartRepo > CartRepo.count()", 16, 18, true},
+		"CartRepo.obsolete()":       {domain.KindMethod, domain.OpRemove, main + " > CartRepo > CartRepo.obsolete()", 15, 17, true},
 		"CartRepo.Cache":            {domain.KindClass, domain.OpChange, main + " > CartRepo > CartRepo.Cache", 20, 24, false},
-		"CartRepo.Cache.clear":      {domain.KindMethod, domain.OpChange, main + " > CartRepo > CartRepo.Cache > CartRepo.Cache.clear", 21, 23, true},
+		"CartRepo.Cache.clear()":    {domain.KindMethod, domain.OpChange, main + " > CartRepo > CartRepo.Cache > CartRepo.Cache.clear()", 21, 23, true},
 		"CartRepo.Mode":             {domain.KindEnum, domain.OpChange, main + " > CartRepo > CartRepo.Mode", 26, 26, false},
 		"CartRepo.Mode.STRICT":      {domain.KindEnumMember, domain.OpAdd, main + " > CartRepo > CartRepo.Mode > CartRepo.Mode.STRICT", 26, 26, true},
 		"Item":                      {domain.KindRecord, domain.OpAdd, main + " > Item", 29, 29, true},
 		"Item.sku":                  {domain.KindField, domain.OpAdd, main + " > Item > Item.sku", 29, 29, true},
 		"CartRepoTest":              {domain.KindClass, domain.OpAdd, test + " > CartRepoTest", 3, 5, true},
-		"CartRepoTest.counts":       {domain.KindMethod, domain.OpAdd, test + " > CartRepoTest > CartRepoTest.counts", 4, 4, true},
+		"CartRepoTest.counts()":     {domain.KindMethod, domain.OpAdd, test + " > CartRepoTest > CartRepoTest.counts()", 4, 4, true},
 	}
 	for name, w := range wants {
 		nodes := allNamed(r, name)
@@ -133,12 +131,12 @@ func TestJavaChangesBecomeCodeUnits(t *testing.T) {
 	if len(pkgs) != 1 || pkgs[0].Kind != domain.KindPackage || pkgs[0].Signature != "package com.shop" {
 		t.Errorf("the package node carries the declared package: %+v", pkgs)
 	}
-	for _, name := range []string{"CartRepo.size", "CartRepo.Mode.FAST", "Util", "Util.one"} {
+	for _, name := range []string{"CartRepo.size", "CartRepo.Mode.FAST", "Util", "Util.one()", "CartRepo.CartRepo()"} {
 		if n := allNamed(r, name); len(n) != 0 {
 			t.Errorf("an unchanged unit must not appear: %s", name)
 		}
 	}
-	if n := allNamed(r, "CartRepoTest.counts"); len(n) == 1 && !n[0].Test {
+	if n := allNamed(r, "CartRepoTest.counts()"); len(n) == 1 && !n[0].Test {
 		t.Error("a test file's units are tests")
 	}
 
@@ -158,6 +156,24 @@ func TestJavaChangesBecomeCodeUnits(t *testing.T) {
 	}
 }
 
+// A field and a method may share a name in Java. Removing the field and changing the method must
+// report exactly that, never pair one with the other.
+func TestJavaFieldAndMethodWithOneNameStayApart(t *testing.T) {
+	s := repo(t,
+		map[string]string{"Person.java": "class Person {\n    private String name;\n\n    String name() {\n        return name;\n    }\n}\n"},
+		map[string]string{"Person.java": "class Person {\n    String name() {\n        return \"x\";\n    }\n}\n"},
+	)
+	r := structure(t, s)
+	checkTotals(t, s, r)
+	field, method := allNamed(r, "Person.name"), allNamed(r, "Person.name()")
+	if len(field) != 1 || field[0].Kind != domain.KindField || field[0].Op != domain.OpRemove {
+		t.Errorf("the field is removed: %+v", field)
+	}
+	if len(method) != 1 || method[0].Kind != domain.KindMethod || method[0].Op != domain.OpChange {
+		t.Errorf("the method is changed, not removed: %+v", method)
+	}
+}
+
 func TestJavaMethodRenameIsRecognized(t *testing.T) {
 	body := "(int[] xs) {\n        int t = 0;\n        for (int x : xs) t += x;\n        return t;\n    }\n"
 	s := repo(t,
@@ -166,11 +182,11 @@ func TestJavaMethodRenameIsRecognized(t *testing.T) {
 	)
 	r := structure(t, s)
 	checkTotals(t, s, r)
-	n := allNamed(r, "Cart.total")
-	if len(n) != 1 || n[0].Op != domain.OpChange || n[0].PreviousName != "Cart.sum" {
+	n := allNamed(r, "Cart.total(int[])")
+	if len(n) != 1 || n[0].Op != domain.OpChange || n[0].PreviousName != "Cart.sum(int[])" {
 		t.Fatalf("a renamed method with an identical body keeps its identity: %+v", n)
 	}
-	if len(allNamed(r, "Cart.sum")) != 0 {
+	if len(allNamed(r, "Cart.sum(int[])")) != 0 {
 		t.Error("the old name must not also appear as removed")
 	}
 }

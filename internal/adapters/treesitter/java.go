@@ -21,11 +21,11 @@ var javaGrammar = Grammar{name: "java", wasm: javaWasm}
 // package is PackageRef{Dir: its directory, Name: its declared package, such as
 // "com.example.app"}; a file with no package declaration takes its directory's name, or "" at
 // the repository root. Top-level types are named by their simple name ("Repo"), and members are
-// qualified by their enclosing type: "Repo.get", "Repo.Inner", "Repo.Inner.close".
+// qualified by their enclosing type: "Repo.size", "Repo.Inner", "Repo.Inner.close()".
 //
 //   - class -> CLASS; interface and @interface (annotation type) -> INTERFACE; enum -> ENUM;
 //     record -> RECORD.
-//   - Methods and constructors -> METHOD. A constructor is named after its class, "Repo.Repo";
+//   - Methods and constructors -> METHOD. A constructor is named after its class, "Repo.Repo()";
 //     a record's compact constructor is its canonical constructor.
 //   - In an interface, a method without a body -> INTERFACE_METHOD; a default, static, or
 //     private method has a body, so it is a METHOD. An annotation type's elements ->
@@ -37,10 +37,13 @@ var javaGrammar = Grammar{name: "java", wasm: javaWasm}
 //     fields, and constructors after the constants are members of the enum.
 //   - Record components -> FIELD, spanning the component. Their order is the record's own code,
 //     since it is the canonical constructor's parameter order.
-//   - Overloads: when a type declares several methods or constructors with one name, each
-//     takes its parameter types as a suffix, "Repo.find(String)" and "Repo.find(int,int)", so
-//     every name is unique and stable. A method that is not overloaded keeps its plain name, so
-//     changing its parameters is a change to it, not a removal plus an addition.
+//   - Every method, constructor, and annotation element is named with its parameter types, as
+//     Java identifies methods: "Repo.find(String)", "Repo.find(int,int)", "Repo.size()". So
+//     overloads have unique names, a method never shares a name with a field, constant, or
+//     nested type of the same name ("Repo.size" beside "Repo.size()"), and no name depends on
+//     its siblings, so adding or removing an overload leaves the others alone. Changing a
+//     parameter's type changes the name; when the body is identical, the differ follows it
+//     like a rename, since BodyHash leaves the parameter types out.
 //   - Static and instance initializer blocks are not units: they are part of their type's own
 //     code. Anonymous classes, local classes, and lambdas are part of the enclosing member.
 //
@@ -72,22 +75,27 @@ func (a *Java) Analyze(ctx context.Context, p string, src []byte) (domain.FileAn
 		pkgName = path.Base(dir)
 	}
 	e := &javaExtractor{
-		src:  src,
+		text: string(src),
 		path: p,
 		pkg:  domain.PackageRef{Dir: dir, Name: pkgName},
 		test: isJavaTest(p),
 	}
-	generated := isJavaGeneratedHeader(root)
+	// A file is generated when its header says so, or when every type it declares is annotated
+	// @Generated. One annotated type beside hand-written ones does not hide the others.
+	types, annotated := 0, 0
 	javaDeclarations(root, func(n, doc Node) {
 		if javaTypeKinds[n.Type()] != "" {
 			e.typeDecl(n, doc, "")
-			generated = generated || javaHasGeneratedAnnotation(n)
+			types++
+			if javaHasGeneratedAnnotation(n) {
+				annotated++
+			}
 		}
 	})
 	return domain.FileAnalysis{
 		Package:   e.pkg,
 		Units:     e.units,
-		Generated: generated,
+		Generated: isJavaGeneratedHeader(root) || types > 0 && annotated == types,
 		Test:      e.test,
 	}, nil
 }
@@ -102,7 +110,7 @@ var javaTypeKinds = map[string]domain.UnitKind{
 }
 
 type javaExtractor struct {
-	src   []byte
+	text  string // the file's source, copied once
 	path  string
 	pkg   domain.PackageRef
 	test  bool
@@ -124,7 +132,9 @@ func (e *javaExtractor) span(u *domain.Unit, n, doc Node) {
 		from = doc
 	}
 	u.StartLine, u.EndLine = from.StartLine(), n.EndLine()
-	u.Source = spanText(e.src, from, n)
+	// A slice of the one copy of the file, so nested types share their text rather than
+	// copying it once per level of nesting.
+	u.Source = e.text[from.StartByte():n.EndByte()]
 	u.Doc = javaDocText(doc)
 }
 
@@ -145,10 +155,10 @@ func (e *javaExtractor) typeDecl(n, doc Node, scope string) {
 	if kind == domain.KindRecord {
 		params := n.ChildByField("parameters")
 		for _, c := range params.NamedChildren() {
-			if cn := c.ChildByField("name"); !cn.IsNull() {
-				e.component(c, name)
+			if cn := javaComponentName(c); cn != "" {
+				e.component(c, cn, name)
 				owned[c] = true
-				order = append(order, cn.Text())
+				order = append(order, cn)
 			}
 		}
 		canonical = javaParamTypes(params)
@@ -169,20 +179,12 @@ func (e *javaExtractor) typeDecl(n, doc Node, scope string) {
 // members extracts the members a type body declares. Every member that became a unit is
 // recorded in owned, so the type's hash leaves it out.
 func (e *javaExtractor) members(body Node, scope string, iface bool, canonical string, owned map[Node]bool) {
-	// A name declared more than once in this body is overloaded.
-	count := map[string]int{}
-	javaDeclarations(body, func(n, _ Node) {
-		if name := javaCallableName(n); name != "" {
-			count[name]++
-		}
-	})
 	javaDeclarations(body, func(n, doc Node) {
 		switch t := n.Type(); {
 		case javaTypeKinds[t] != "":
 			e.typeDecl(n, doc, scope)
-		case t == "method_declaration" || t == "constructor_declaration" ||
-			t == "compact_constructor_declaration" || t == "annotation_type_element_declaration":
-			e.callable(n, doc, scope, iface, canonical, count[javaCallableName(n)] > 1)
+		case javaCallableName(n) != "":
+			e.callable(n, doc, scope, iface, canonical)
 		case t == "field_declaration" || t == "constant_declaration":
 			e.fields(n, doc, scope, iface || t == "constant_declaration")
 		case t == "enum_constant":
@@ -196,41 +198,36 @@ func (e *javaExtractor) members(body Node, scope string, iface bool, canonical s
 }
 
 // callable extracts a method, constructor, or annotation-type element.
-func (e *javaExtractor) callable(n, doc Node, scope string, iface bool, canonical string, overloaded bool) {
-	simple := javaCallableName(n)
-	if simple == "" {
-		return
-	}
+func (e *javaExtractor) callable(n, doc Node, scope string, iface bool, canonical string) {
 	body := n.ChildByField("body")
 	kind := domain.KindMethod
 	if n.Type() == "annotation_type_element_declaration" || (iface && body.IsNull()) {
 		kind = domain.KindInterfaceMethod
 	}
-	params := javaParamTypes(n.ChildByField("parameters"))
+	paramList := n.ChildByField("parameters")
+	params := javaParamTypes(paramList)
 	if n.Type() == "compact_constructor_declaration" {
 		params = canonical
 	}
-	if overloaded {
-		simple += "(" + params + ")"
-	}
 	u := domain.Unit{
 		Kind:      kind,
-		Name:      javaQualify(scope, simple),
+		Name:      javaQualify(scope, javaCallableName(n)+"("+params+")"),
 		Parent:    scope,
 		Signature: javaHeader(n, body),
 		Hash:      javaHash(nil).hash(n),
 	}
-	// Everything but the name: modifiers, annotations, type parameters, result, parameters,
-	// throws, and body. A body of one statement, such as "return null;", is too common to
-	// prove a rename.
+	// Everything but the name and the parameter types, which make up the unit's name:
+	// modifiers, annotations, type parameters, result, parameter names, throws, and body. So
+	// renaming a method, or changing a parameter's type, is followed when the body is
+	// identical. A body of one statement, such as "return null;", is too common to prove that.
 	if len(body.NamedChildren()) >= 2 {
 		var rest []Node
 		for _, c := range n.NamedChildren() {
-			if c.Field() != "name" {
+			if c.Field() != "name" && c.Field() != "parameters" {
 				rest = append(rest, c)
 			}
 		}
-		u.BodyHash = hashStrings(n.Type(), javaHash(nil).hash(rest...))
+		u.BodyHash = hashStrings(n.Type(), javaParamNames(paramList), javaHash(nil).hash(rest...))
 	}
 	e.span(&u, n, doc)
 	e.units = append(e.units, e.finish(u))
@@ -272,10 +269,10 @@ func (e *javaExtractor) fields(n, doc Node, scope string, constant bool) {
 }
 
 // component extracts one record component as a field.
-func (e *javaExtractor) component(c Node, scope string) {
+func (e *javaExtractor) component(c Node, name, scope string) {
 	u := domain.Unit{
 		Kind:      domain.KindField,
-		Name:      javaQualify(scope, c.ChildByField("name").Text()),
+		Name:      javaQualify(scope, name),
 		Parent:    scope,
 		Signature: c.Text(),
 		Hash:      javaHash(nil).hash(c),
@@ -330,6 +327,33 @@ func javaDeclarations(body Node, visit func(n, doc Node)) {
 	}
 }
 
+// javaParamNames returns a parameter list's names in order, such as "key,rest".
+func javaParamNames(params Node) string {
+	var names []string
+	for _, p := range params.NamedChildren() {
+		if n := javaComponentName(p); n != "" {
+			names = append(names, n)
+		}
+	}
+	return strings.Join(names, ",")
+}
+
+// javaComponentName returns the name of a parameter or record component: "x" in "int x" or
+// "rest" in "String... rest".
+func javaComponentName(c Node) string {
+	switch c.Type() {
+	case "formal_parameter":
+		return c.ChildByField("name").Text()
+	case "spread_parameter":
+		for _, d := range c.NamedChildren() {
+			if d.Type() == "variable_declarator" {
+				return d.ChildByField("name").Text()
+			}
+		}
+	}
+	return ""
+}
+
 // javaCallableName returns the simple name of a method, constructor, or annotation-type
 // element, or empty for anything else.
 func javaCallableName(n Node) string {
@@ -376,14 +400,11 @@ func javaCompactText(n Node) string {
 			if t == "" {
 				return
 			}
-			if b.Len() > 0 && (word && javaWordByte(t[0]) || t == "extends" || t == "super" || t == "&") {
+			if b.Len() > 0 && (word && javaWordByte(t[0]) || t == "extends" || t == "super") {
 				b.WriteByte(' ')
 			}
 			b.WriteString(t)
 			word = javaWordByte(t[len(t)-1])
-			if t == "&" {
-				b.WriteByte(' ')
-			}
 			return
 		}
 		for _, c := range kids {
