@@ -194,3 +194,11 @@ provider with no key saved and none given is a 400.
   structure (I2); keying on Dir too keeps files in different directories apart, as Go does.
 - **Known limitations (pre-existing, outside the epic):** goanalysis copies a multi-name `var` statement
   once per name (quadratic memory); a diff has no overall parse-time budget.
+- **S5 done** (merged). `ports.ModelOpener` / `OpenedModel`; `PromptSource.LoadReadingLevel`.
+  Settings snapshot at request time; model opened per run. Reading-level text in
+  `prompts/default/reading-levels/<id>.md`, appended to leaf/parent/outcomes prompts; a custom
+  `--prompts` variant must include those files. Defaults: claude-sonnet-5-5 (Claude Code,
+  Anthropic API), gpt-6.1-sol (OpenAI API, Codex). `--model` applies only to `--adapter`'s
+  provider. S6's stand-in availability was replaced; the pinned-save defect was fixed.
+- **Open:** `codexcli TestStoppingCodexKillsItsWholeProcessTree/timed_out` flakes under load.
+  north-star.md's "Model access" and "Language" rows need updating at close.
