@@ -38,7 +38,7 @@ Also:
 - **Agent friendly.** One command builds a diff and prints its link, so your coding agent can
   "diffduck it" for you.
 
-Go code gets the full structural tree today. Other files appear as file-level changes.
+Go, Python, JavaScript/TypeScript, Rust, C#, and Java code gets the full structural tree. Other files appear as file-level changes.
 
 ## Install
 
