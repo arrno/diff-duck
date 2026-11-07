@@ -202,3 +202,12 @@ provider with no key saved and none given is a 400.
   provider. S6's stand-in availability was replaced; the pinned-save defect was fixed.
 - **Open:** `codexcli TestStoppingCodexKillsItsWholeProcessTree/timed_out` flakes under load.
   north-star.md's "Model access" and "Language" rows need updating at close.
+- **S7d Java done** (merged). Package = dir + declared package; no MODULE unit; methods always
+  named with parameter types (`Repo.find(String)`); `static final` and interface fields are CONST.
+- **Epic naming rule (decided after Java review):** methods/constructors/operators are always named
+  with their normalized parameter-type list, never suffix-only-on-collision. C# was told to adopt it.
+- **For integration review:** the differ's `pairDuplicates` should refuse to pair units of
+  different Kind (defence in depth for every language). Known limitation, pre-existing:
+  `paintOwners`/`addExcerpt` copy changed lines into every node sharing a range, so
+  `int a0,…,aN;` type changes give N × file output. Policy question for the user: a comment
+  header can mark a file "generated" and so not summarized.
