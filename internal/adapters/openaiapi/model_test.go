@@ -9,8 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"github.com/openai/openai-go/v3/option"
+	"time"
 
 	"github.com/arrno/diff-duck/internal/services/ports"
 )
@@ -40,7 +39,7 @@ func serverWithEffort(t *testing.T, effort string, status int, reply string, got
 		_, _ = w.Write([]byte(reply))
 	}))
 	t.Cleanup(srv.Close)
-	m, err := newWithOptions(key, "gpt-test", effort, option.WithBaseURL(srv.URL), option.WithMaxRetries(0))
+	m, err := newWithOptions(key, "gpt-test", effort, withBaseURL(srv.URL), withBackoff(time.Millisecond))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +169,7 @@ func TestTheKeyNeverLeaks(t *testing.T) {
 		}
 	}
 	// A transport failure must not echo the key either.
-	m, _ := newWithOptions(key, "gpt-test", "", option.WithBaseURL("http://127.0.0.1:1/"+key+"/"), option.WithMaxRetries(0))
+	m, _ := newWithOptions(key, "gpt-test", "", withBaseURL("http://127.0.0.1:1/"+key+"/"), withBackoff(time.Millisecond))
 	if _, err := m.Complete(ctx, req); err == nil || strings.Contains(err.Error(), key) || errors.Unwrap(err) != nil {
 		t.Fatalf("transport error: %v", err)
 	}
