@@ -22,11 +22,22 @@ type Model struct {
 	dir    string
 }
 
+// Available reports whether the Claude Code binary is on PATH. An empty binary means "claude".
+func Available(binary string) bool {
+	_, err := exec.LookPath(orDefault(binary))
+	return err == nil
+}
+
+func orDefault(binary string) string {
+	if binary == "" {
+		return "claude"
+	}
+	return binary
+}
+
 // New returns a model that runs in a scratch directory it creates. Call Close when finished.
 func New(binary, model, effort string) (*Model, error) {
-	if binary == "" {
-		binary = "claude"
-	}
+	binary = orDefault(binary)
 	if _, err := exec.LookPath(binary); err != nil {
 		return nil, fmt.Errorf("the claude-cli adapter needs %q on PATH: %w", binary, err)
 	}

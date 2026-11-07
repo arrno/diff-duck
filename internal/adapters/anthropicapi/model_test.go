@@ -86,3 +86,67 @@ func TestFailuresAreNotReportedAsSuccess(t *testing.T) {
 		t.Errorf("status errors must surface: %v", err)
 	}
 }
+
+func TestExplicitKeyAuthenticatesAndNeverLeaks(t *testing.T) {
+	const key = "sk-ant-test-SECRET-0123456789"
+	t.Setenv("ANTHROPIC_API_KEY", "env-key-must-not-be-used")
+	t.Setenv("ANTHROPIC_AUTH_TOKEN", "env-token-must-not-be-used")
+	var headers http.Header
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		headers = r.Header.Clone()
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(400)
+		// A server that echoes the key back must not get it into our error.
+		_, _ = w.Write([]byte(`{"type":"error","error":{"type":"invalid_request_error","message":"bad key ` + key + `"}}`))
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("ANTHROPIC_BASE_URL", srv.URL)
+
+	m, err := NewWithKey(key, "claude-opus-5-5", "medium")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = m.Complete(context.Background(), ports.ModelRequest{Schema: []byte(`{}`)})
+	if err == nil || !strings.Contains(err.Error(), "400") {
+		t.Fatalf("expected a status error: %v", err)
+	}
+	if strings.Contains(err.Error(), key) {
+		t.Fatalf("error leaks the key: %v", err)
+	}
+	if strings.Contains(m.Describe(), key) || m.Describe() != "anthropic-api/claude-opus-5-5/medium" {
+		t.Fatalf("describe: %s", m.Describe())
+	}
+	sent := headers.Get("X-Api-Key") + headers.Get("Authorization")
+	if !strings.Contains(sent, key) || strings.Contains(sent, "env-") {
+		t.Fatalf("only the explicit key may authenticate: x-api-key=%q authorization=%q", headers.Get("X-Api-Key"), headers.Get("Authorization"))
+	}
+
+	if _, err := NewWithKey("  ", "claude-opus-5-5", "medium"); err == nil {
+		t.Fatal("an empty key must be rejected")
+	}
+
+	// A transport failure must not echo the key or expose the SDK error to unwrapping.
+	t.Setenv("ANTHROPIC_BASE_URL", "http://127.0.0.1:1/"+key+"/")
+	m, _ = NewWithKey(key, "claude-opus-5-5", "medium")
+	_, err = m.Complete(context.Background(), ports.ModelRequest{Schema: []byte(`{}`)})
+	if err == nil || strings.Contains(err.Error(), key) || errors.Unwrap(err) != nil {
+		t.Fatalf("transport error: %v", err)
+	}
+}
+
+func TestErrorTextIsBounded(t *testing.T) {
+	long := strings.Repeat("x", 5000)
+	_, err := server(t, 400, `{"type":"error","error":{"type":"invalid_request_error","message":"`+long+`"}}`, nil, nil).Complete(context.Background(), ports.ModelRequest{Schema: []byte(`{}`)})
+	if err == nil || len(err.Error()) > 600 || !strings.Contains(err.Error(), "invalid_request_error") {
+		t.Fatalf("error must be bounded and keep the type: %d bytes", len(err.Error()))
+	}
+}
+
+func TestCancellationIsReportedAsSuch(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := server(t, 200, message("end_turn", `{}`), nil, nil).Complete(ctx, ports.ModelRequest{Schema: []byte(`{}`)})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("got %v", err)
+	}
+}

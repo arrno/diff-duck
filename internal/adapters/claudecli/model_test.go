@@ -97,3 +97,17 @@ func TestFailuresAreNotReportedAsSuccess(t *testing.T) {
 		t.Fatalf("nonzero exit should surface its message: %v", err)
 	}
 }
+
+func TestAvailability(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "no-such-claude")
+	if Available(missing) {
+		t.Fatal("a missing binary is not available")
+	}
+	if _, err := New(missing, "m", "low"); err == nil || !strings.Contains(err.Error(), "PATH") {
+		t.Fatalf("New must fail clearly without the binary: %v", err)
+	}
+	m, _ := fakeClaude(t, "exit 0")
+	if !Available(m.binary) {
+		t.Fatal("an installed binary is available")
+	}
+}
