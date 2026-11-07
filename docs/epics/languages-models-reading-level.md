@@ -202,3 +202,24 @@ provider with no key saved and none given is a 400.
   provider. S6's stand-in availability was replaced; the pinned-save defect was fixed.
 - **Open:** `codexcli TestStoppingCodexKillsItsWholeProcessTree/timed_out` flakes under load.
   north-star.md's "Model access" and "Language" rows need updating at close.
+- **S7d Java done** (merged). Package = dir + declared package; no MODULE unit; methods always
+  named with parameter types (`Repo.find(String)`); `static final` and interface fields are CONST.
+- **Epic naming rule (decided after Java review):** methods/constructors/operators are always named
+  with their normalized parameter-type list, never suffix-only-on-collision. C# was told to adopt it.
+- **For integration review:** the differ's `pairDuplicates` should refuse to pair units of
+  different Kind (defence in depth for every language). Known limitation, pre-existing:
+  `paintOwners`/`addExcerpt` copy changed lines into every node sharing a range, so
+  `int a0,…,aN;` type changes give N × file output. Policy question for the user: a comment
+  header can mark a file "generated" and so not summarized.
+- **S7a JS/TS done** (merged). One analyzer for the whole family (`NewJavaScript`), choosing
+  javascript/typescript/tsx grammar by extension, so a `.js` -> `.ts` migration keeps identity.
+  Build script gained optional `GRAMMAR_SHARED`. Binary +3.5 MiB.
+- **For integration:** move the parse preamble and reserve/finish scaffolding duplicated across
+  the language extractors into `extract.go` once all languages land. Go-side extraction after the
+  WASM parse doesn't check ctx (applies to all tree-sitter languages).
+- **S7b Rust done** (merged). File = MODULE; inline `mod` flattened into names (one MODULE per
+  file); impl items under their type, trait impls as `Foo.<fmt::Display>.fmt()`; every fn name
+  ends in `()` so getters can't collide with fields; doctests are hashed as code. Binary +1.24 MiB.
+- **For integration:** unify the MODULE signature format across Python/JS/Rust; move
+  `rsNextSibling` into `tree.go`; share the package-ref, reserve/finish, and generated-header code in
+  `extract.go`. Process lesson: give each parallel agent its own scratch directory (they collided).
