@@ -236,3 +236,13 @@ provider with no key saved and none given is a 400.
   2xx with a broken body (no double billing), follows no redirects, bounds every body. Binary
   71.9 -> 41.9 MB. Behavior change: `OPENAI_BASE_URL`, `OPENAI_ORG_ID` and `OPENAI_PROJECT_ID`
   are no longer read from the environment.
+- **Integration fixes done** (merged): one shared copy of each file's text (Python nested blow-up
+  580 MB -> 35 MB); shared extractor scaffolding (`parseClean`, `fileUnits`, `Node.NextSibling`,
+  `Tree.Any`); MODULE signature `module <repo path>` via `domain.ModuleSignature`; ctx checked per
+  declaration and member; `pairDuplicates` is kind-safe; rename messages name the package when
+  dirs match; Codex flake fixed (150/150 runs under load).
+- **Queued for the fix phase:** qualified names repeat the enclosing scope per member and level in
+  Python/JS/Rust/Java (a ~190 KB file reaches ~1.1 GB); lift C#'s `csNameBudget` into `fileUnits`.
+- **Known limitations (accepted):** a FIELD -> METHOD change with one unit per side pairs as CHANGE
+  (a real kind change); Python ignores a lone `@generated` header while the others honor it; unit
+  text slices keep a file (<= 2 MiB) alive for the run.
