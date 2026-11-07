@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -163,24 +164,91 @@ func TestFailRunningOnlyTouchesRunningDiffs(t *testing.T) {
 	}
 }
 
-func TestRemoveDeletesEverySavedDiff(t *testing.T) {
+func TestClearDiffsDeletesEverySavedDiffAndKeepsSettings(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "diffs.db")
 	s, err := Open(ctx, path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Create(ctx, saved("one", time.UnixMilli(1000))); err != nil {
+	// Saved diffs hold the analyzed code; none of it may stay on disk once cleared.
+	const code = "func SourceCodeThatMustNotLinger() {}"
+	for i, id := range []string{"one", "two"} {
+		d := saved(id, time.UnixMilli(int64(1000+i)))
+		d.Overview = code
+		if err := s.Create(ctx, d); err != nil {
+			t.Fatal(err)
+		}
+	}
+	settings := domain.ModelSettings{Provider: domain.ProviderCodex, ReadingLevel: domain.ReadingPhD}
+	if err := s.SaveSettings(ctx, settings); err != nil {
 		t.Fatal(err)
 	}
 	s.Close()
-	if err := Remove(path); err != nil {
+
+	if err := ClearDiffs(ctx, path); err != nil {
 		t.Fatal(err)
 	}
-	if err := Remove(path); err != nil {
-		t.Fatalf("removing a missing database must succeed: %v", err)
+	for _, suffix := range []string{"", "-wal"} {
+		data, _ := os.ReadFile(path + suffix)
+		if strings.Contains(string(data), code) {
+			t.Fatalf("a cleared diff's text is still in %s", filepath.Base(path+suffix))
+		}
 	}
-	if list, err := open(t, path).List(ctx); err != nil || len(list) != 0 {
+	if info, err := os.Stat(path); err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("the database must stay private: %v %v", info.Mode(), err)
+	}
+	reopened := open(t, path)
+	if list, err := reopened.List(ctx); err != nil || len(list) != 0 {
 		t.Fatalf("got %v, %v; want an empty library", list, err)
+	}
+	if got, err := reopened.LoadSettings(ctx); err != nil || got != settings {
+		t.Fatalf("settings must survive: %+v %v", got, err)
+	}
+
+	// Another process holding the database open (here, a second store reading from it) keeps
+	// the write-ahead log; reset must say so rather than claim nothing is left.
+	held := filepath.Join(t.TempDir(), "held.db")
+	h := open(t, held)
+	if err := h.Create(ctx, saved("one", time.UnixMilli(1000))); err != nil {
+		t.Fatal(err)
+	}
+	tx, err := h.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.QueryContext(ctx, `SELECT id FROM diffs`); err != nil {
+		t.Fatal(err)
+	}
+	if err := ClearDiffs(ctx, held); !errors.Is(err, ErrDatabaseInUse) {
+		t.Fatalf("clearing a database another process reads must report it: %v", err)
+	}
+	_ = tx.Rollback()
+
+	// A file SQLite cannot read is removed whole, so reset still gets the app working again.
+	corrupt := filepath.Join(t.TempDir(), "corrupt.db")
+	if err := os.WriteFile(corrupt, []byte(strings.Repeat("not a database ", 600)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := ClearDiffs(ctx, corrupt); err != nil {
+		t.Fatalf("clearing an unreadable database must remove it: %v", err)
+	}
+	if _, err := os.Stat(corrupt); !os.IsNotExist(err) {
+		t.Fatal("an unreadable database must be removed")
+	}
+
+	missing := filepath.Join(t.TempDir(), "none.db")
+	// A log a crash left beside a missing database may hold diff text.
+	if err := os.WriteFile(missing+"-wal", []byte(code), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := ClearDiffs(ctx, missing); err != nil {
+		t.Fatalf("clearing a missing database must succeed: %v", err)
+	}
+	if _, err := os.Stat(missing); !os.IsNotExist(err) {
+		t.Fatal("clearing a missing database must not create one")
+	}
+	if _, err := os.Stat(missing + "-wal"); !os.IsNotExist(err) {
+		t.Fatal("a leftover log must be removed")
 	}
 }

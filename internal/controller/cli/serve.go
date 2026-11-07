@@ -129,10 +129,11 @@ func serve(ctx context.Context, opts serveOptions, stdout io.Writer) error {
 	defer closeAnalyzers()
 
 	settings := services.NewSettingsKeeper(services.SettingsDeps{
-		Store:        store,
-		Secrets:      keys,
-		Availability: available,
-		Pinned:       opts.pinned,
+		Store:          store,
+		Secrets:        keys,
+		Availability:   available,
+		Pinned:         opts.pinned,
+		PinnedProvider: adapterProvider(opts.pinned),
 	})
 	library := services.NewDiffLibrary(services.LibraryDeps{
 		Store:         store,

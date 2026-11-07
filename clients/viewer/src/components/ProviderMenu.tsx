@@ -90,8 +90,12 @@ export function ProviderMenu() {
     }
   };
 
-  const chosen = settings?.providers.find((p) => p.id === provider);
   const pinned = settings?.pinned ?? "";
+  // While pinned to a provider, the picker shows the one runs really use. Saving still sends the
+  // saved provider, which applies again once the server runs without --adapter.
+  const shown = settings?.pinnedProvider || provider;
+  // A key belongs to the saved provider, so its field shows only when that is the one shown.
+  const chosen = shown === provider ? settings?.providers.find((p) => p.id === provider) : undefined;
 
   return (
     <Popover.Root open={open} onOpenChange={change}>
@@ -113,7 +117,7 @@ export function ProviderMenu() {
                   <select
                     id="provider"
                     className={fieldClass}
-                    value={provider}
+                    value={shown}
                     disabled={pinned !== ""}
                     aria-describedby={pinned ? "provider-pinned" : undefined}
                     onChange={(e) => { setProvider(e.target.value as ProviderId); setKey(""); setError(""); setNotice(""); }}

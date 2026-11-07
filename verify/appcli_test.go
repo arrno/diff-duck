@@ -19,6 +19,7 @@ import (
 type appCLI struct {
 	t    *testing.T
 	home string
+	env  []string // added to the environment of every command, overriding what it names
 }
 
 func newAppCLI(t *testing.T) *appCLI {
@@ -31,7 +32,7 @@ func (c *appCLI) run(args ...string) (int, string, string) {
 	c.t.Helper()
 	cmd := exec.Command(binary, args...)
 	cmd.Dir = fixture
-	cmd.Env = append(os.Environ(), "DIFFDUCK_HOME="+c.home)
+	cmd.Env = append(append(os.Environ(), c.env...), "DIFFDUCK_HOME="+c.home)
 	var stdout, stderr strings.Builder
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err := cmd.Run()
@@ -104,6 +105,13 @@ func TestAppCommandsLifecycle(t *testing.T) {
 		t.Fatalf("delete removed the wrong diffs: %+v", remaining)
 	}
 
+	// Reset deletes diffs, never the model settings.
+	var settings struct {
+		Provider     string `json:"provider"`
+		ReadingLevel string `json:"readingLevel"`
+	}
+	appJSON(t, "PUT", url+"api/settings", `{"provider":"codex","readingLevel":"phd"}`, &settings)
+
 	if code, _, _ := c.run("reset"); code != 2 {
 		t.Fatalf("reset without --yes and without an answer must refuse, got %d", code)
 	}
@@ -116,6 +124,11 @@ func TestAppCommandsLifecycle(t *testing.T) {
 	}
 	if left := c.list(); len(left) != 0 {
 		t.Fatalf("reset left diffs: %+v", left)
+	}
+	restarted := appURL.FindString(reset)
+	appJSON(t, "GET", restarted+"api/settings", "", &settings)
+	if settings.Provider != "codex" || settings.ReadingLevel != "phd" {
+		t.Fatalf("reset must keep the settings: %+v", settings)
 	}
 
 	if out := c.must("down"); !strings.Contains(out, "stopped") {

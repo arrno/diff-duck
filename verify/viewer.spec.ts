@@ -31,8 +31,8 @@ const showService = async (page: Page) => {
 test("the opening view shows the first level of what changed", async ({ page }) => {
   const errors = await open(page);
   await expect(page.getByTestId("overview")).toHaveText("Scripted overview of the change.");
-  await expect(page.getByTestId("stats")).toContainText("13 files");
-  await expect(page.getByTestId("stats")).toContainText("traced 63/63 changed lines");
+  await expect(page.getByTestId("stats")).toContainText("14 files");
+  await expect(page.getByTestId("stats")).toContainText("traced 66/66 changed lines");
   await expect(page.getByRole("button", { name: /All changes/ })).toHaveAttribute("aria-pressed", "true");
   await expect(page).toHaveTitle(/ · DiffDuck$/);
   await expect(page.getByRole("button", { name: "Model settings" })).toHaveCount(0);
@@ -157,6 +157,27 @@ test("the facts that matter are actually rendered", async ({ page }) => {
   await expect(page.getByTestId("warnings")).toBeVisible();
   await expect(page.getByTestId("warnings")).toContainText("users/broken.go");
   await expect(node(page, "users|users::Low")).toContainText("Was: const Low = iota");
+});
+
+test("kinds from other languages carry their own labels and row styles", async ({ page }) => {
+  const errors = await open(page);
+  await expand(page, "web|web::shapes");
+  // A TypeScript class is a group labeled Class, holding a full row for its changed method.
+  const shape = node(page, "web|web::shapes.Shape");
+  await expect(toggleOf(page, "web|web::shapes.Shape").locator('[title]').first()).toHaveAttribute("title", "Class");
+  await expand(page, "web|web::shapes.Shape");
+  const area = node(page, "web|web::shapes.Shape.area");
+  await expect(area.locator('[title]').first()).toHaveAttribute("title", "Method");
+  await expect(area.getByText("CHANGE", { exact: true })).toHaveCount(1);
+  await expect(shape).toBeVisible();
+  // An enum member is a compact row: its declaration is the content, not a named, summarized unit.
+  await expand(page, "web|web::shapes.Color");
+  const blue = node(page, "web|web::shapes.Color.Blue");
+  await expect(blue.locator('[title]').first()).toHaveAttribute("title", "Enum member");
+  await expect(blue.getByText("ADD", { exact: true })).toHaveCount(1);
+  await expect(blue.locator("span.font-mono")).toHaveText("Blue");
+  await expect(blue).not.toContainText("shapes.Color.Blue");
+  expect(errors).toEqual([]);
 });
 
 test("selecting an outcome filters with ancestors kept, and clearing restores", async ({ page }) => {

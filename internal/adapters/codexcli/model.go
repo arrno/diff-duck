@@ -18,6 +18,11 @@
 // that first call itself cannot be prevented. Users who need a hard guarantee should pick a
 // provider without tools.
 //
+// Killing the process group is what makes that stop reach the native Codex behind the
+// `codex` wrapper, and only Unix offers it here. On other platforms (Windows) the adapter
+// fails closed: Available reports false and New returns an error, so Codex is never run
+// where its first tool call could not be stopped.
+//
 // Codex's JSON events carry no explicit refusal marker. Content-filter stops map to
 // ports.ErrModelRefused; a refusal written as prose surfaces as an invalid-output error.
 package codexcli
@@ -34,6 +39,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -71,8 +77,12 @@ const (
 	maxLine = 64 << 20
 )
 
-// Available reports whether the Codex binary is on PATH. An empty binary means "codex".
+// Available reports whether Codex can be used: the platform lets the adapter stop Codex's
+// whole process tree, and the binary is on PATH. An empty binary means "codex".
 func Available(binary string) bool {
+	if !canStopProcessTree {
+		return false
+	}
 	_, err := exec.LookPath(orDefault(binary))
 	return err == nil
 }
@@ -81,6 +91,9 @@ func Available(binary string) bool {
 // Codex's built-in default; an empty effort leaves Codex's default reasoning effort. Call
 // Close when finished.
 func New(binary, model, effort string) (*Model, error) {
+	if !canStopProcessTree {
+		return nil, fmt.Errorf("the codex adapter is not supported on %s: DiffDuck cannot stop the processes Codex starts here, so it could not stop Codex at its first tool call", runtime.GOOS)
+	}
 	binary = orDefault(binary)
 	if _, err := exec.LookPath(binary); err != nil {
 		return nil, fmt.Errorf("the codex adapter needs %q on PATH: %w", binary, err)

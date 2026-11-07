@@ -144,3 +144,23 @@ func requireExited(t *testing.T, pid int) {
 	}
 	t.Fatalf("child %d is still running", pid)
 }
+
+// On Unix, where the process tree can be stopped, availability follows PATH alone.
+func TestAvailabilityFollowsPATHWhereTheProcessTreeCanBeStopped(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("PATH", dir)
+	if Available("") {
+		t.Fatal("codex is not on PATH, so it is not available")
+	}
+	if err := os.WriteFile(filepath.Join(dir, "codex"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if !Available("") {
+		t.Fatal("codex on PATH is available")
+	}
+	m, err := New("", "gpt-test", "low")
+	if err != nil {
+		t.Fatalf("New must succeed with codex on PATH: %v", err)
+	}
+	m.Close()
+}

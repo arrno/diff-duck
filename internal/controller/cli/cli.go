@@ -28,7 +28,7 @@ The app:
   diffduck up [flags]                       start the app in the background
   diffduck down                             stop it
   diffduck status                           say whether it is running, and where
-  diffduck reset [--yes]                    delete every saved diff
+  diffduck reset [--yes]                    delete every saved diff; settings are kept
   diffduck serve [flags]                    run the app in this terminal instead
 
 Diffs (these start the app if it is not running):

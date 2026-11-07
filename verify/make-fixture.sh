@@ -106,6 +106,18 @@ printf 'first\n' > "odd dir/notes with space.md"
 printf '\x00\x01\x02binary-one' > web/logo.bin
 printf 'stable content that will be renamed without edits\n' > web/before.txt
 printf 'color: red\n' > web/app.css
+cat > web/shapes.ts <<'T'
+export enum Color {
+  Red,
+  Green,
+}
+
+export class Shape {
+  area(): number {
+    return 0;
+  }
+}
+T
 git add -A
 git commit -q -m base
 git tag base
@@ -226,6 +238,19 @@ printf '\x00\x01\x02binary-two' > web/logo.bin
 git mv web/before.txt web/after.txt
 printf 'color: blue\n' > web/app.css
 chmod +x web/app.css
+cat > web/shapes.ts <<'T'
+export enum Color {
+  Red,
+  Green,
+  Blue,
+}
+
+export class Shape {
+  area(): number {
+    return 1;
+  }
+}
+T
 printf 'module example.com/fixture\n\ngo 1.23\n' > go.mod
 git add -A
 git commit -q -m head

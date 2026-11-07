@@ -69,7 +69,7 @@ commits by hand.
 | `diffduck up` | Start the app in the background and print its address. Optional, since every `diff` command starts it. |
 | `diffduck status` | Say whether the app is running, and where. |
 | `diffduck down` | Stop the app. |
-| `diffduck reset` | Delete every saved diff. Asks first, or pass `--yes`. |
+| `diffduck reset` | Delete every saved diff. Model settings are kept. Asks first, or pass `--yes`. |
 | `diffduck serve` | Run the app in this terminal instead of the background. |
 
 Settings are flags on `up` (or `serve`) and apply until the next `down`. For example,

@@ -1,3 +1,7 @@
+//go:build unix
+
+// The fake Codex binaries here are shell scripts, and the adapter runs Codex only on Unix.
+
 package codexcli
 
 import (
