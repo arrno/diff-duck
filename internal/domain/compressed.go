@@ -30,6 +30,22 @@ const (
 	KindVar             UnitKind = "VAR"
 	KindFile            UnitKind = "FILE"
 	KindRegion          UnitKind = "REGION"
+
+	// Kinds for languages other than Go.
+	//
+	// A module is one source file that is its own namespace, such as a Python, JavaScript, or
+	// Rust file. It sits between a package and the units declared in it, and analyzers that
+	// produce one must follow these rules, which StructuralDiffer relies on:
+	//   - A file has at most one MODULE unit, and it spans the whole file.
+	//   - Every other unit in the file is named QualifiedName(module, rest), and its Parent
+	//     chain ends at the module.
+	KindModule     UnitKind = "MODULE"
+	KindClass      UnitKind = "CLASS"
+	KindEnum       UnitKind = "ENUM"
+	KindEnumMember UnitKind = "ENUM_MEMBER"
+	KindTrait      UnitKind = "TRAIT"
+	KindRecord     UnitKind = "RECORD"
+	KindProperty   UnitKind = "PROPERTY"
 )
 
 // Confidence states how far a generated explanation can be relied on.

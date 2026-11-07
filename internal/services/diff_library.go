@@ -32,7 +32,7 @@ const (
 type LibraryDeps struct {
 	Store         ports.DiffStore
 	Repositories  ports.RepositorySource
-	Analyzer      ports.SourceAnalyzer
+	Analyzers     []ports.SourceAnalyzer
 	Model         ports.LanguageModel
 	Prompts       ports.PromptSource
 	Concurrency   int
@@ -202,7 +202,7 @@ func (l *DiffLibrary) compress(ctx context.Context, diff *domain.SavedDiff) (*do
 		return nil, err
 	}
 	defer repo.Close()
-	differ := NewStructuralDiffer(repo, l.deps.Analyzer)
+	differ := NewStructuralDiffer(repo, l.deps.Analyzers...)
 	compressor := NewDiffCompressor(repo, differ, l.deps.Model, l.deps.Prompts, l.deps.Concurrency)
 	return compressor.Compress(ctx, CompressRequest{
 		Repository:    diff.Repository,

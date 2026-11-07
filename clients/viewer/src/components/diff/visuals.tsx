@@ -1,5 +1,6 @@
 import {
-  Box, ChevronRight, Code2, FileText, FunctionSquare, Hash, ListTree, Minus, Package, Pencil, Plug, Plus, Tag, Variable,
+  Box, Braces, ChevronRight, Code2, FileCode, FileText, FunctionSquare, Hash, KeyRound, Layers, ListOrdered, ListTree,
+  Minus, Package, Pencil, Plug, Plus, Shapes, Tag, Variable,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -24,6 +25,13 @@ const KINDS: Record<UnitKind, { icon: LucideIcon; label: string }> = {
   VAR: { icon: Variable, label: "Variable" },
   FILE: { icon: FileText, label: "File" },
   REGION: { icon: ListTree, label: "Other lines" },
+  MODULE: { icon: FileCode, label: "Module" },
+  CLASS: { icon: Shapes, label: "Class" },
+  ENUM: { icon: ListOrdered, label: "Enum" },
+  ENUM_MEMBER: { icon: Hash, label: "Enum member" },
+  TRAIT: { icon: Layers, label: "Trait" },
+  RECORD: { icon: Braces, label: "Record" },
+  PROPERTY: { icon: KeyRound, label: "Property" },
 };
 
 /** The operation in words and an icon, so color never carries the meaning alone. */

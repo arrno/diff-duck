@@ -61,8 +61,8 @@ var ErrDiffNotFound = errors.New("diff not found")
 type SourceAnalyzer interface {
 	Supports(path string) bool
 	// Analyze returns the file's units. An error means the file could not be understood, and
-	// callers must represent it without structural claims.
-	Analyze(path string, src []byte) (domain.FileAnalysis, error)
+	// callers must represent it without structural claims. Cancelling ctx abandons the work.
+	Analyze(ctx context.Context, path string, src []byte) (domain.FileAnalysis, error)
 }
 
 // ModelRequest is one generation. System holds instructions. User holds untrusted data from

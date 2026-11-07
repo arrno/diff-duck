@@ -199,6 +199,7 @@ function RegionRow({ node }: { node: DiffNode }) {
 
 function isCompact(node: DiffNode): boolean {
   return node.kind === "FIELD" || node.kind === "CONST" || node.kind === "VAR" || node.kind === "INTERFACE_METHOD" ||
+    node.kind === "ENUM_MEMBER" ||
     ((node.kind === "STRUCT" || node.kind === "INTERFACE" || node.kind === "TYPE") && node.summary.origin === "structural" && !node.summary.text);
 }
 

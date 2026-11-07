@@ -88,3 +88,20 @@ func TestOutcomeIDAppearsOnceAndUnassignedIsSorted(t *testing.T) {
 		t.Fatalf("%v", unassigned)
 	}
 }
+
+func TestRequalifyRenamesOnlyNamesInsideTheScope(t *testing.T) {
+	for _, c := range [][4]string{
+		{"old", "old", "new", "new"},
+		{"old.Repo.get", "old", "new", "new.Repo.get"},
+		{"older.Repo", "old", "new", "older.Repo"},
+		{"other.f", "old", "new", "other.f"},
+		{"old.f", "", "new", "old.f"},
+	} {
+		if got := Requalify(c[0], c[1], c[2]); got != c[3] {
+			t.Errorf("Requalify(%q, %q, %q) = %q, want %q", c[0], c[1], c[2], got, c[3])
+		}
+	}
+	if QualifiedName("util", "Repo") != "util.Repo" {
+		t.Error("qualified names join with a dot")
+	}
+}

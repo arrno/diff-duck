@@ -3,7 +3,8 @@
 export type ChangeOp = "ADD" | "REMOVE" | "CHANGE";
 export type UnitKind =
   | "PACKAGE" | "STRUCT" | "INTERFACE" | "TYPE" | "FUNCTION" | "METHOD"
-  | "INTERFACE_METHOD" | "FIELD" | "CONST" | "VAR" | "FILE" | "REGION";
+  | "INTERFACE_METHOD" | "FIELD" | "CONST" | "VAR" | "FILE" | "REGION"
+  | "MODULE" | "CLASS" | "ENUM" | "ENUM_MEMBER" | "TRAIT" | "RECORD" | "PROPERTY";
 
 export interface DiffLine {
   kind: "context" | "added" | "removed" | "gap";
