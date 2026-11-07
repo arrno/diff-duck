@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/arrno/diff-duck/internal/domain"
 )
@@ -135,41 +136,41 @@ func TestRustUnitsNamesKindsNestingAndLines(t *testing.T) {
 		test       bool
 	}
 	wants := map[string]want{
-		"shapes":                          {domain.KindModule, "", 1, 98, false},
-		"shapes.Point":                    {domain.KindStruct, "shapes", 4, 13, false},
-		"shapes.Point.x":                  {domain.KindField, "shapes.Point", 9, 10, false},
-		"shapes.Point.label":              {domain.KindField, "shapes.Point", 11, 12, false},
-		"shapes.Pair":                     {domain.KindStruct, "shapes", 15, 15, false},
-		"shapes.Pair.0":                   {domain.KindField, "shapes.Pair", 15, 15, false},
-		"shapes.Pair.1":                   {domain.KindField, "shapes.Pair", 15, 15, false},
-		"shapes.Shape":                    {domain.KindEnum, "shapes", 17, 22, false},
-		"shapes.Shape.Circle":             {domain.KindEnumMember, "shapes.Shape", 18, 18, false},
-		"shapes.Shape.Rect":               {domain.KindEnumMember, "shapes.Shape", 19, 19, false},
-		"shapes.Shape.Empty":              {domain.KindEnumMember, "shapes.Shape", 20, 21, false},
-		"shapes.Named":                    {domain.KindTrait, "shapes", 24, 32, false},
-		"shapes.Named.Out":                {domain.KindType, "shapes.Named", 25, 25, false},
-		"shapes.Named.N":                  {domain.KindConst, "shapes.Named", 26, 26, false},
-		"shapes.Named.name":               {domain.KindInterfaceMethod, "shapes.Named", 27, 27, false},
-		"shapes.Named.shout":              {domain.KindMethod, "shapes.Named", 28, 31, false},
-		"shapes.Point.new":                {domain.KindMethod, "shapes.Point", 35, 38, false},
-		"shapes.Point.ORIGIN":             {domain.KindConst, "shapes.Point", 39, 39, false},
-		"shapes.Point.<fmt::Display>.fmt": {domain.KindMethod, "shapes.Point", 43, 45, false},
-		"shapes.Point.<Named>.Out":        {domain.KindType, "shapes.Point", 49, 49, false},
-		"shapes.Point.<Named>.N":          {domain.KindConst, "shapes.Point", 50, 50, false},
-		"shapes.Point.<Named>.name":       {domain.KindMethod, "shapes.Point", 51, 53, false},
-		"shapes.Pair.<From<u8>>.from":     {domain.KindMethod, "shapes.Pair", 57, 57, false},
-		"shapes.Pair.<From<u16>>.from":    {domain.KindMethod, "shapes.Pair", 61, 61, false},
-		"shapes.String.<Named>.Out":       {domain.KindType, "shapes", 65, 65, false},
-		"shapes.String.<Named>.N":         {domain.KindConst, "shapes", 66, 66, false},
-		"shapes.String.<Named>.name":      {domain.KindMethod, "shapes", 67, 67, false},
-		"shapes.LIMIT":                    {domain.KindConst, "shapes", 70, 70, false},
-		"shapes.COUNTER":                  {domain.KindVar, "shapes", 71, 71, false},
-		"shapes.Points":                   {domain.KindType, "shapes", 72, 72, false},
-		"shapes.square!":                  {domain.KindFunction, "shapes", 74, 76, false},
-		"shapes.area":                     {domain.KindFunction, "shapes", 78, 81, false},
-		"shapes.geometry.Line":            {domain.KindStruct, "shapes", 84, 84, false},
-		"shapes.geometry.Line.len":        {domain.KindMethod, "shapes.geometry.Line", 86, 86, false},
-		"shapes.tests.it_works":           {domain.KindFunction, "shapes", 94, 97, true},
+		"shapes":                            {domain.KindModule, "", 1, 98, false},
+		"shapes.Point":                      {domain.KindStruct, "shapes", 4, 13, false},
+		"shapes.Point.x":                    {domain.KindField, "shapes.Point", 9, 10, false},
+		"shapes.Point.label":                {domain.KindField, "shapes.Point", 11, 12, false},
+		"shapes.Pair":                       {domain.KindStruct, "shapes", 15, 15, false},
+		"shapes.Pair.0":                     {domain.KindField, "shapes.Pair", 15, 15, false},
+		"shapes.Pair.1":                     {domain.KindField, "shapes.Pair", 15, 15, false},
+		"shapes.Shape":                      {domain.KindEnum, "shapes", 17, 22, false},
+		"shapes.Shape.Circle":               {domain.KindEnumMember, "shapes.Shape", 18, 18, false},
+		"shapes.Shape.Rect":                 {domain.KindEnumMember, "shapes.Shape", 19, 19, false},
+		"shapes.Shape.Empty":                {domain.KindEnumMember, "shapes.Shape", 20, 21, false},
+		"shapes.Named":                      {domain.KindTrait, "shapes", 24, 32, false},
+		"shapes.Named.Out":                  {domain.KindType, "shapes.Named", 25, 25, false},
+		"shapes.Named.N":                    {domain.KindConst, "shapes.Named", 26, 26, false},
+		"shapes.Named.name()":               {domain.KindInterfaceMethod, "shapes.Named", 27, 27, false},
+		"shapes.Named.shout()":              {domain.KindMethod, "shapes.Named", 28, 31, false},
+		"shapes.Point.new()":                {domain.KindMethod, "shapes.Point", 35, 38, false},
+		"shapes.Point.ORIGIN":               {domain.KindConst, "shapes.Point", 39, 39, false},
+		"shapes.Point.<fmt::Display>.fmt()": {domain.KindMethod, "shapes.Point", 43, 45, false},
+		"shapes.Point.<Named>.Out":          {domain.KindType, "shapes.Point", 49, 49, false},
+		"shapes.Point.<Named>.N":            {domain.KindConst, "shapes.Point", 50, 50, false},
+		"shapes.Point.<Named>.name()":       {domain.KindMethod, "shapes.Point", 51, 53, false},
+		"shapes.Pair.<From<u8>>.from()":     {domain.KindMethod, "shapes.Pair", 57, 57, false},
+		"shapes.Pair.<From<u16>>.from()":    {domain.KindMethod, "shapes.Pair", 61, 61, false},
+		"shapes.String.<Named>.Out":         {domain.KindType, "shapes", 65, 65, false},
+		"shapes.String.<Named>.N":           {domain.KindConst, "shapes", 66, 66, false},
+		"shapes.String.<Named>.name()":      {domain.KindMethod, "shapes", 67, 67, false},
+		"shapes.LIMIT":                      {domain.KindConst, "shapes", 70, 70, false},
+		"shapes.COUNTER":                    {domain.KindVar, "shapes", 71, 71, false},
+		"shapes.Points":                     {domain.KindType, "shapes", 72, 72, false},
+		"shapes.square!":                    {domain.KindFunction, "shapes", 74, 76, false},
+		"shapes.area()":                     {domain.KindFunction, "shapes", 78, 81, false},
+		"shapes.geometry.Line":              {domain.KindStruct, "shapes", 84, 84, false},
+		"shapes.geometry.Line.len()":        {domain.KindMethod, "shapes.geometry.Line", 86, 86, false},
+		"shapes.tests.it_works()":           {domain.KindFunction, "shapes", 94, 97, true},
 	}
 	got := map[string]domain.Unit{}
 	for _, u := range a.Units {
@@ -226,19 +227,19 @@ func TestRustUnitsNamesKindsNestingAndLines(t *testing.T) {
 func TestRustSignaturesDocsAndSource(t *testing.T) {
 	got := unitsByName(analyzeRs(t, newTestRuntime(t), "shapes.rs", rsSample))
 	for name, sig := range map[string]string{
-		"shapes":                          "module shapes.rs",
-		"shapes.Point":                    "#[derive(Debug, Clone)] pub struct Point<'a, T: Clone> where T: Default",
-		"shapes.Point.label":              "#[serde(skip)] label: &'a str",
-		"shapes.Pair":                     "pub struct Pair(pub u8, String)",
-		"shapes.Pair.0":                   "pub u8",
-		"shapes.Shape.Empty":              "#[default] Empty = 3",
-		"shapes.Named.name":               "fn name(&self) -> String",
-		"shapes.Named.shout":              "fn shout(&self) -> String",
-		"shapes.Point.<fmt::Display>.fmt": "fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result",
-		"shapes.LIMIT":                    "pub const LIMIT: usize = 10",
-		"shapes.square!":                  "macro_rules! square",
-		"shapes.area":                     "pub async fn area(s: &Shape) -> f64",
-		"shapes.tests.it_works":           "#[test] fn it_works()",
+		"shapes":                            "module shapes.rs",
+		"shapes.Point":                      "#[derive(Debug, Clone)] pub struct Point<'a, T: Clone> where T: Default",
+		"shapes.Point.label":                "#[serde(skip)] label: &'a str",
+		"shapes.Pair":                       "pub struct Pair(pub u8, String)",
+		"shapes.Pair.0":                     "pub u8",
+		"shapes.Shape.Empty":                "#[default] Empty = 3",
+		"shapes.Named.name()":               "fn name(&self) -> String",
+		"shapes.Named.shout()":              "fn shout(&self) -> String",
+		"shapes.Point.<fmt::Display>.fmt()": "fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result",
+		"shapes.LIMIT":                      "pub const LIMIT: usize = 10",
+		"shapes.square!":                    "macro_rules! square",
+		"shapes.area()":                     "pub async fn area(s: &Shape) -> f64",
+		"shapes.tests.it_works()":           "#[test] fn it_works()",
 	} {
 		if got[name].Signature != sig {
 			t.Errorf("%s signature %q, want %q", name, got[name].Signature, sig)
@@ -256,15 +257,15 @@ func TestRustSignaturesDocsAndSource(t *testing.T) {
 	if src := got["shapes.Point"].Source; !strings.HasPrefix(src, "/// A point") || !strings.HasSuffix(src, "label: &'a str,\n}") {
 		t.Errorf("a unit's code spans its docs, attributes, and body: %q", src)
 	}
-	if got["shapes.area"].Source != "pub async fn area(s: &Shape) -> f64 {\n    fn helper() -> f64 { 1.0 }\n    helper()\n}" {
-		t.Errorf("source %q", got["shapes.area"].Source)
+	if got["shapes.area()"].Source != "pub async fn area(s: &Shape) -> f64 {\n    fn helper() -> f64 { 1.0 }\n    helper()\n}" {
+		t.Errorf("source %q", got["shapes.area()"].Source)
 	}
 }
 
 func TestRustBlockDocComments(t *testing.T) {
 	got := unitsByName(analyzeRs(t, newTestRuntime(t), "m.rs", "/*! Crate doc. */\n// plain\n/**\n * Block doc.\n * More.\n */\n// note\nfn f() {}\n"))
-	if got["m.f"].Doc != "Block doc.\nMore." || got["m.f"].StartLine != 3 {
-		t.Errorf("block doc %q from line %d", got["m.f"].Doc, got["m.f"].StartLine)
+	if got["m.f()"].Doc != "Block doc.\nMore." || got["m.f()"].StartLine != 3 {
+		t.Errorf("block doc %q from line %d", got["m.f()"].Doc, got["m.f()"].StartLine)
 	}
 	if got["m"].Doc != "Crate doc." {
 		t.Errorf("inner block doc %q", got["m"].Doc)
@@ -320,7 +321,7 @@ func TestRustHashIgnoresFormattingAndComments(t *testing.T) {
 func TestRustHashSeesTextInsideLiterals(t *testing.T) {
 	rt := newTestRuntime(t)
 	hashOf := func(lit string) (string, string) {
-		u := unitsByName(analyzeRs(t, rt, "m.rs", "fn f() -> &'static str {\n    let a = 1;\n    "+lit+"\n}\n"))["m.f"]
+		u := unitsByName(analyzeRs(t, rt, "m.rs", "fn f() -> &'static str {\n    let a = 1;\n    "+lit+"\n}\n"))["m.f()"]
 		return u.Hash, u.BodyHash
 	}
 	for name, pair := range map[string][2]string{
@@ -353,14 +354,14 @@ func TestRustContainerHashExcludesMembers(t *testing.T) {
 		t.Error("changing a field changes only the field")
 	}
 	method := unitsByName(analyzeRs(t, rt, "m.rs", src("u8", "2", "struct S")))
-	if method["m.S"].Hash != base["m.S"].Hash || method["m"].Hash != base["m"].Hash || method["m.S.m"].Hash == base["m.S.m"].Hash {
+	if method["m.S"].Hash != base["m.S"].Hash || method["m"].Hash != base["m"].Hash || method["m.S.m()"].Hash == base["m.S.m()"].Hash {
 		t.Error("changing a method changes only the method")
 	}
 	added := unitsByName(analyzeRs(t, rt, "m.rs", strings.Replace(src("u8", "1", "struct S"), "a: u8,", "a: u8,\n    b: u8", 1)))
 	if added["m.S"].Hash != base["m.S"].Hash || added["m.S.b"].Hash == "" {
 		t.Error("adding a field, and the comma it needs, does not change its struct")
 	}
-	header := unitsByName(analyzeRs(t, rt, "m.rs", src("u8", "1", "#[derive(Debug)]\npub struct S")))
+	header := unitsByName(analyzeRs(t, rt, "m.rs", src("u8", "1", "#[derive(Debug)]\nstruct S")))
 	if header["m.S"].Hash == base["m.S"].Hash || header["m"].Hash != base["m"].Hash {
 		t.Error("changing the struct's header or attributes changes the struct only")
 	}
@@ -369,13 +370,13 @@ func TestRustContainerHashExcludesMembers(t *testing.T) {
 		t.Error("changing an import changes the module only")
 	}
 	impl := unitsByName(analyzeRs(t, rt, "m.rs", strings.Replace(src("u8", "1", "struct S"), "impl S", "impl<'a> S", 1)))
-	if impl["m"].Hash == base["m"].Hash || impl["m.S.m"].Hash != base["m.S.m"].Hash {
+	if impl["m"].Hash == base["m"].Hash || impl["m.S.m()"].Hash != base["m.S.m()"].Hash {
 		t.Error("an impl header is the module's own code")
 	}
 	trait := func(body string) map[string]domain.Unit {
 		return unitsByName(analyzeRs(t, rt, "m.rs", "trait T {\n    fn a(&self) -> u8 { "+body+" }\n}\nenum E { A, B }\n"))
 	}
-	if trait("1")["m.T"].Hash != trait("2")["m.T"].Hash || trait("1")["m.T.a"].Hash == trait("2")["m.T.a"].Hash {
+	if trait("1")["m.T"].Hash != trait("2")["m.T"].Hash || trait("1")["m.T.a()"].Hash == trait("2")["m.T.a()"].Hash {
 		t.Error("a provided method is not its trait's code")
 	}
 	moreVariants := unitsByName(analyzeRs(t, rt, "m.rs", "trait T {\n    fn a(&self) -> u8 { 1 }\n}\nenum E { A, B, C }\n"))
@@ -394,25 +395,25 @@ func TestRustContainerHashExcludesMembers(t *testing.T) {
 func TestRustBodyHashProvesRenamesOnly(t *testing.T) {
 	rt := newTestRuntime(t)
 	body := "(a: u8) -> u8 {\n    let b = a + 1;\n    b * 2\n}\n"
-	old := unitsByName(analyzeRs(t, rt, "m.rs", "fn old"+body))["m.old"]
-	renamed := unitsByName(analyzeRs(t, rt, "m.rs", "fn new"+body))["m.new"]
+	old := unitsByName(analyzeRs(t, rt, "m.rs", "fn old"+body))["m.old()"]
+	renamed := unitsByName(analyzeRs(t, rt, "m.rs", "fn new"+body))["m.new()"]
 	if old.BodyHash == "" || old.BodyHash != renamed.BodyHash || old.Hash == renamed.Hash {
 		t.Errorf("a rename keeps the body hash and changes the hash: %+v %+v", old, renamed)
 	}
-	asyncVersion := unitsByName(analyzeRs(t, rt, "m.rs", "async fn new"+body))["m.new"]
-	attributed := unitsByName(analyzeRs(t, rt, "m.rs", "#[inline]\nfn new"+body))["m.new"]
-	generic := unitsByName(analyzeRs(t, rt, "m.rs", "fn new<'a>"+body))["m.new"]
+	asyncVersion := unitsByName(analyzeRs(t, rt, "m.rs", "async fn new"+body))["m.new()"]
+	attributed := unitsByName(analyzeRs(t, rt, "m.rs", "#[inline]\nfn new"+body))["m.new()"]
+	generic := unitsByName(analyzeRs(t, rt, "m.rs", "fn new<'a>"+body))["m.new()"]
 	for name, u := range map[string]domain.Unit{"async": asyncVersion, "attribute": attributed, "generics": generic} {
 		if u.BodyHash == old.BodyHash {
 			t.Errorf("a %s version is not an identical body", name)
 		}
 	}
-	method := unitsByName(analyzeRs(t, rt, "m.rs", "struct S;\nimpl S {\n    fn total"+strings.ReplaceAll(body, "\n", "\n    ")+"}\n"))["m.S.total"]
+	method := unitsByName(analyzeRs(t, rt, "m.rs", "struct S;\nimpl S {\n    fn total"+strings.ReplaceAll(body, "\n", "\n    ")+"}\n"))["m.S.total()"]
 	if method.BodyHash != old.BodyHash {
 		t.Error("a method body proves a rename like a function body")
 	}
-	short := unitsByName(analyzeRs(t, rt, "m.rs", "fn f() -> u8 {\n    1\n}\n"))["m.f"]
-	required := unitsByName(analyzeRs(t, rt, "m.rs", "trait T {\n    fn f(&self);\n}\n"))["m.T.f"]
+	short := unitsByName(analyzeRs(t, rt, "m.rs", "fn f() -> u8 {\n    1\n}\n"))["m.f()"]
+	required := unitsByName(analyzeRs(t, rt, "m.rs", "trait T {\n    fn f(&self);\n}\n"))["m.T.f()"]
 	if short.BodyHash != "" || required.BodyHash != "" {
 		t.Error("a one-expression body, or no body, cannot prove a rename")
 	}
@@ -440,25 +441,25 @@ unsafe impl Send for W<u8> {}
 		parents[u.Name] = u.Parent
 	}
 	want := []string{
-		"m.W", "m.W.0", "m.W.get", "m.W.<Clone>.clone", "m.W.<std::fmt::Debug>.fmt", "m.W.<std::fmt::Display>.fmt",
-		"m.W.<Iterator>.Item", "m.W.<Iterator>.next", "m.&'a W<u8>.<Trait>.go", "m.[u8].<Trait>.go",
-		"m.other::Thing.<other::Ext>.go", "m.W.<Add<Output = u8>>.go",
+		"m.W", "m.W.0", "m.W.get()", "m.W.<Clone>.clone()", "m.W.<std::fmt::Debug>.fmt()", "m.W.<std::fmt::Display>.fmt()",
+		"m.W.<Iterator>.Item", "m.W.<Iterator>.next()", "m.&'a W<u8>.<Trait>.go()", "m.[u8].<Trait>.go()",
+		"m.other::Thing.<other::Ext>.go()", "m.W.<Add<Output=u8>>.go()",
 	}
 	if fmt.Sprint(names) != fmt.Sprint(want) {
 		t.Errorf("names\n got %q\nwant %q", names, want)
 	}
-	if parents["m.W.<std::fmt::Display>.fmt"] != "m.W" || parents["m.[u8].<Trait>.go"] != "m" || parents["m.other::Thing.<other::Ext>.go"] != "m" {
+	if parents["m.W.<std::fmt::Display>.fmt()"] != "m.W" || parents["m.[u8].<Trait>.go()"] != "m" || parents["m.other::Thing.<other::Ext>.go()"] != "m" {
 		t.Errorf("a type declared here is the parent, otherwise the module: %v", parents)
 	}
 	// A type of the same name in another scope is not this impl's type.
 	nested := unitsByName(analyzeRs(t, rt, "m.rs", "mod a { pub struct S; }\nimpl S { fn f(&self) {} }\n"))
-	if nested["m.S.f"].Parent != "m" {
-		t.Errorf("parent %q", nested["m.S.f"].Parent)
+	if nested["m.S.f()"].Parent != "m" {
+		t.Errorf("parent %q", nested["m.S.f()"].Parent)
 	}
 	// Declaring the type after its impl still makes it the parent.
 	after := unitsByName(analyzeRs(t, rt, "m.rs", "impl S { fn f(&self) {} }\nenum S { A }\n"))
-	if after["m.S.f"].Parent != "m.S" {
-		t.Errorf("parent %q", after["m.S.f"].Parent)
+	if after["m.S.f()"].Parent != "m.S" {
+		t.Errorf("parent %q", after["m.S.f()"].Parent)
 	}
 }
 
@@ -480,11 +481,11 @@ mod declared;
 		test   bool
 	}
 	wants := map[string]want{
-		"lib.outer.inner.deep": {"lib", true},
-		"lib.outer.inner.S":    {"lib", true},
-		"lib.outer.inner.S.a":  {"lib.outer.inner.S", true},
-		"lib.outer.inner.S.m":  {"lib.outer.inner.S", true},
-		"lib.outer.shallow":    {"lib", false},
+		"lib.outer.inner.deep()": {"lib", true},
+		"lib.outer.inner.S":      {"lib", true},
+		"lib.outer.inner.S.a":    {"lib.outer.inner.S", true},
+		"lib.outer.inner.S.m()":  {"lib.outer.inner.S", true},
+		"lib.outer.shallow()":    {"lib", false},
 	}
 	got := unitsByName(a)
 	for name, w := range wants {
@@ -496,7 +497,7 @@ mod declared;
 		t.Errorf("units: %d", len(a.Units))
 	}
 	edited := unitsByName(analyzeRs(t, newTestRuntime(t), "lib.rs", strings.Replace(src, "mod inner {", "mod inner {\n        use super::*;", 1)))
-	if edited["lib"].Hash == got["lib"].Hash || edited["lib.outer.inner.deep"].Hash != got["lib.outer.inner.deep"].Hash {
+	if edited["lib"].Hash == got["lib"].Hash || edited["lib.outer.inner.deep()"].Hash != got["lib.outer.inner.deep()"].Hash {
 		t.Error("an inline module's own code belongs to the file module")
 	}
 }
@@ -545,7 +546,7 @@ struct S {
     g: u8,
 }
 `))
-	for name, want := range map[string]bool{"m.a": true, "m.b": true, "m.c": true, "m.d": false, "m.S.e": true, "m.f": false, "m.S.g": true, "m.S": false, "m": false} {
+	for name, want := range map[string]bool{"m.a()": true, "m.b()": true, "m.c()": true, "m.d()": false, "m.S.e()": true, "m.f()": false, "m.S.g": true, "m.S": false, "m": false} {
 		if got[name].Test != want {
 			t.Errorf("%s: test=%v want %v", name, got[name].Test, want)
 		}
@@ -585,7 +586,7 @@ func TestRustConstraintsAndGenerated(t *testing.T) {
 func TestRustModuleNamingAndEmptyFile(t *testing.T) {
 	rt := newTestRuntime(t)
 	root := analyzeRs(t, rt, "build.rs", "fn main() {}\n")
-	if root.Package != (domain.PackageRef{Dir: ".", Name: ""}) || root.Units[0].Name != "build" || root.Units[1].Name != "build.main" {
+	if root.Package != (domain.PackageRef{Dir: ".", Name: ""}) || root.Units[0].Name != "build" || root.Units[1].Name != "build.main()" {
 		t.Errorf("root module: %+v %+v", root.Package, root.Units)
 	}
 	mod := analyzeRs(t, rt, "src/net/mod.rs", "")
@@ -598,5 +599,178 @@ func TestRustSupports(t *testing.T) {
 	r := NewRust(nil)
 	if !r.Supports("a/b.rs") || r.Supports("a/b.rs.bk") || r.Supports("a/b.go") || r.Supports("rs") {
 		t.Error("Supports must accept exactly .rs files")
+	}
+}
+
+// Rust keeps fields and functions in separate namespaces, so a getter commonly shares its
+// field's name. They must stay two units, or the differ pairs a field with a method.
+func TestRustGetterAndFieldAreDistinctUnits(t *testing.T) {
+	a := analyzeRs(t, newTestRuntime(t), "user.rs", "pub struct User {\n    name: String,\n}\nimpl User {\n    pub fn name(&self) -> &str {\n        &self.name\n    }\n}\nmacro_rules! name { () => {} }\n")
+	kinds := map[string]domain.UnitKind{}
+	for _, u := range a.Units {
+		if _, dup := kinds[u.Name]; dup {
+			t.Errorf("two units named %s", u.Name)
+		}
+		kinds[u.Name] = u.Kind
+	}
+	if kinds["user.User.name"] != domain.KindField || kinds["user.User.name()"] != domain.KindMethod || kinds["user.name!"] != domain.KindFunction {
+		t.Errorf("units %v", kinds)
+	}
+}
+
+func TestRustRewrappedImplHeaderKeepsNames(t *testing.T) {
+	rt := newTestRuntime(t)
+	names := func(src string) []string {
+		var out []string
+		for _, u := range analyzeRs(t, rt, "m.rs", src).Units[1:] {
+			out = append(out, u.Name)
+		}
+		return out
+	}
+	one := names("impl Lookup<&'static str, u64> for (A, B) {\n    fn get(&self) {}\n}\n")
+	wrapped := names("impl Lookup<\n    &'static   str, // key\n    u64,\n> for (A,B) {\n    fn get(&self) {}\n}\n")
+	if fmt.Sprint(one) != fmt.Sprint(wrapped) || fmt.Sprint(one) != "[m.(A, B).<Lookup<&'static str, u64>>.get()]" {
+		t.Errorf("names %q and %q", one, wrapped)
+	}
+}
+
+func TestRustBlanketImplIsNotUnderSameNamedStruct(t *testing.T) {
+	got := unitsByName(analyzeRs(t, newTestRuntime(t), "m.rs", "struct T;\nimpl<T: Clone> Show for T { fn show(&self) {} }\nimpl Show for T { fn other(&self) {} }\n"))
+	if got["m.T.<Show>.show()"].Parent != "m" || got["m.T.<Show>.other()"].Parent != "m.T" {
+		t.Errorf("parents %q %q", got["m.T.<Show>.show()"].Parent, got["m.T.<Show>.other()"].Parent)
+	}
+}
+
+// Deciding whether a comma counts must not rescan its list, or one long array literal makes
+// analysis quadratic.
+func TestRustLongListsAnalyzeInLinearTime(t *testing.T) {
+	rt := newTestRuntime(t)
+	for name, src := range map[string]string{
+		"array":      "const X: [u8; 60000] = [" + strings.Repeat("0, ", 60000) + "];\n",
+		"tuples":     "const X: &[(char, char)] = &[" + strings.Repeat("('a', 'b'), ", 30000) + "];\n",
+		"parameters": "fn f(" + strings.Repeat("a: u8, ", 30000) + ") {\n    let x = 1;\n    x\n}\n",
+	} {
+		start := time.Now()
+		analyzeRs(t, rt, "m.rs", src)
+		if d := time.Since(start); d > 5*time.Second {
+			t.Errorf("%s: %d KB took %v", name, len(src)>>10, d)
+		}
+	}
+}
+
+// cargo test runs the code blocks in doc comments, so changing one changes the unit; changing
+// the prose around it does not.
+func TestRustDoctestsAreCode(t *testing.T) {
+	rt := newTestRuntime(t)
+	unit := func(doc string) domain.Unit {
+		return unitsByName(analyzeRs(t, rt, "m.rs", doc+"fn f() {}\n"))["m.f()"]
+	}
+	base := unit("/// Adds.\n///\n/// ```\n/// assert!(true);\n/// ```\n")
+	prose := unit("/// Adds numbers.\n///\n/// ```\n/// assert!(true);\n/// ```\n")
+	code := unit("/// Adds.\n///\n/// ```\n/// std::process::exit(1);\n/// ```\n")
+	block := unit("/** Adds.\n * ```\n * std::process::exit(1);\n * ```\n */\n")
+	if prose.Hash != base.Hash || code.Hash == base.Hash || block.Hash == base.Hash {
+		t.Error("only a doctest's code changes the unit")
+	}
+	module := func(doc string) string { return analyzeRs(t, rt, "m.rs", doc+"fn f() {}\n").Units[0].Hash }
+	if module("//! ```\n//! a();\n//! ```\n") == module("//! ```\n//! b();\n//! ```\n") || module("//! A.\n") != module("//! B.\n") {
+		t.Error("a module doctest is the module's code, its prose is not")
+	}
+}
+
+// An attribute alone (#[derive], #[repr], #[serde]) changes what an item is, so adding one
+// changes that unit and nothing around it.
+func TestRustAttributesAreTheirUnitsCode(t *testing.T) {
+	rt := newTestRuntime(t)
+	for name, c := range map[string]struct{ base, attributed, unit string }{
+		"const":    {"const X: u8 = 1;\n", "#[allow(dead_code)]\nconst X: u8 = 1;\n", "m.X"},
+		"static":   {"static X: u8 = 1;\n", "#[used]\nstatic X: u8 = 1;\n", "m.X"},
+		"alias":    {"type X = u8;\n", "#[allow(unused)]\ntype X = u8;\n", "m.X"},
+		"struct":   {"struct S { a: u8 }\n", "#[repr(C)]\nstruct S { a: u8 }\n", "m.S"},
+		"union":    {"union U { a: u8 }\n", "#[repr(C)]\nunion U { a: u8 }\n", "m.U"},
+		"enum":     {"enum E { A }\n", "#[non_exhaustive]\nenum E { A }\n", "m.E"},
+		"trait":    {"trait T {}\n", "#[must_use]\ntrait T {}\n", "m.T"},
+		"macro":    {"macro_rules! m { () => {} }\n", "#[macro_export]\nmacro_rules! m { () => {} }\n", "m.m!"},
+		"variant":  {"enum E { A }\n", "enum E { #[default] A }\n", "m.E.A"},
+		"field":    {"struct S { a: u8 }\n", "struct S { #[serde(skip)] a: u8 }\n", "m.S.a"},
+		"tuple":    {"struct S(u8);\n", "struct S(#[serde(skip)] u8);\n", "m.S.0"},
+		"method":   {"struct S;\nimpl S { fn f(&self) {} }\n", "struct S;\nimpl S { #[inline] fn f(&self) {} }\n", "m.S.f()"},
+		"function": {"fn f() {}\n", "#[inline]\nfn f() {}\n", "m.f()"},
+	} {
+		base, attributed := unitsByName(analyzeRs(t, rt, "m.rs", c.base)), unitsByName(analyzeRs(t, rt, "m.rs", c.attributed))
+		if base[c.unit].Hash == "" || base[c.unit].Hash == attributed[c.unit].Hash {
+			t.Errorf("%s: an attribute must change %s", name, c.unit)
+		}
+		for n, u := range base {
+			if n != c.unit && attributed[n].Hash != u.Hash {
+				t.Errorf("%s: the attribute also changed %s", name, n)
+			}
+		}
+	}
+}
+
+func TestRustCommaRules(t *testing.T) {
+	rt := newTestRuntime(t)
+	hashOf := func(body string) string {
+		return unitsByName(analyzeRs(t, rt, "m.rs", "fn f() {\n    "+body+"\n}\n"))["m.f()"].Hash
+	}
+	for _, pair := range [][2]string{
+		{"let a = [1, 2];", "let a = [1, 2,];"},
+		{"let s = S { a: 1 };", "let s = S { a: 1, };"},
+		{"let x: HashMap<A, B> = m();", "let x: HashMap<A, B,> = m();"},
+		{"g(a);", "g(a, /* c */);"},
+		{"g(a, b);", "g(a, b, // why\n);"},
+	} {
+		if hashOf(pair[0]) != hashOf(pair[1]) {
+			t.Errorf("a trailing comma is formatting: %q vs %q", pair[0], pair[1])
+		}
+	}
+	for _, pair := range [][2]string{
+		{"let (x,) = t;", "let (x) = t;"},
+		{"let r = r\"  \";", "let r = r\" \";"},
+		{"let r = br#\"a  b\"#;", "let r = br#\"a b\"#;"},
+	} {
+		if hashOf(pair[0]) == hashOf(pair[1]) {
+			t.Errorf("must differ: %q vs %q", pair[0], pair[1])
+		}
+	}
+	macroHash := func(src string) string {
+		return unitsByName(analyzeRs(t, rt, "m.rs", src))["m.m!"].Hash
+	}
+	for _, pair := range [][2]string{
+		{"macro_rules! m { ($a:expr) => {} }\n", "macro_rules! m { ($a:expr,) => {} }\n"},
+		{"macro_rules! m { ($($x:expr)*) => {} }\n", "macro_rules! m { ($($x:expr,)*) => {} }\n"},
+	} {
+		if macroHash(pair[0]) == macroHash(pair[1]) {
+			t.Errorf("a comma in a macro matcher is part of it: %q", pair[1])
+		}
+	}
+}
+
+func TestRustMoreTestDetection(t *testing.T) {
+	got := unitsByName(analyzeRs(t, newTestRuntime(t), "m.rs", `#[cfg(any(test, unix))]
+fn a() {}
+struct S;
+impl S {
+    #[cfg(test)]
+    fn b(&self) {}
+    fn c(&self) {}
+}
+enum E {
+    #[cfg(test)]
+    V,
+    W,
+}
+struct P(#[cfg(test)] u8, u8);
+union U { a: u8 }
+impl U { fn d(&self) {} }
+`))
+	for name, want := range map[string]bool{"m.a()": false, "m.S.b()": true, "m.S.c()": false, "m.E.V": true, "m.E.W": false, "m.P.0": true, "m.P.1": false} {
+		if got[name].Test != want {
+			t.Errorf("%s: test=%v want %v", name, got[name].Test, want)
+		}
+	}
+	if got["m.U"].Kind != domain.KindStruct || got["m.U.a"].Kind != domain.KindField || got["m.U.d()"].Parent != "m.U" {
+		t.Errorf("a union is a struct: %+v %+v %+v", got["m.U"], got["m.U.a"], got["m.U.d()"])
 	}
 }

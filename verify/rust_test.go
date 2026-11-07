@@ -111,18 +111,18 @@ func TestRustChangesBecomeCodeUnits(t *testing.T) {
 		direct     bool
 	}
 	wants := map[string]want{
-		"shapes":                          {domain.KindModule, domain.OpChange, "src > shapes", 1, 40, true},
-		"shapes.Point":                    {domain.KindStruct, domain.OpChange, "src > shapes > shapes.Point", 4, 9, false},
-		"shapes.Point.z":                  {domain.KindField, domain.OpAdd, "src > shapes > shapes.Point > shapes.Point.z", 8, 8, true},
-		"shapes.Point.norm":               {domain.KindMethod, domain.OpChange, "src > shapes > shapes.Point > shapes.Point.norm", 12, 14, true},
-		"shapes.Point.obsolete":           {domain.KindMethod, domain.OpRemove, "src > shapes > shapes.Point > shapes.Point.obsolete", 15, 17, true},
-		"shapes.Point.<fmt::Display>.fmt": {domain.KindMethod, domain.OpChange, "src > shapes > shapes.Point > shapes.Point.<fmt::Display>.fmt", 18, 20, true},
-		"shapes.Shape":                    {domain.KindEnum, domain.OpChange, "src > shapes > shapes.Shape", 23, 26, false},
-		"shapes.Shape.Square":             {domain.KindEnumMember, domain.OpAdd, "src > shapes > shapes.Shape > shapes.Shape.Square", 25, 25, true},
-		"shapes.origin":                   {domain.KindFunction, domain.OpChange, "src > shapes > shapes.origin", 28, 30, true},
-		"shapes.tests.origin_is_zero":     {domain.KindFunction, domain.OpAdd, "src > shapes > shapes.tests.origin_is_zero", 36, 39, true},
-		"it":                              {domain.KindModule, domain.OpAdd, "tests > it", 1, 4, true},
-		"it.works":                        {domain.KindFunction, domain.OpAdd, "tests > it > it.works", 1, 4, true},
+		"shapes":                            {domain.KindModule, domain.OpChange, "src > shapes", 1, 40, true},
+		"shapes.Point":                      {domain.KindStruct, domain.OpChange, "src > shapes > shapes.Point", 4, 9, false},
+		"shapes.Point.z":                    {domain.KindField, domain.OpAdd, "src > shapes > shapes.Point > shapes.Point.z", 8, 8, true},
+		"shapes.Point.norm()":               {domain.KindMethod, domain.OpChange, "src > shapes > shapes.Point > shapes.Point.norm()", 12, 14, true},
+		"shapes.Point.obsolete()":           {domain.KindMethod, domain.OpRemove, "src > shapes > shapes.Point > shapes.Point.obsolete()", 15, 17, true},
+		"shapes.Point.<fmt::Display>.fmt()": {domain.KindMethod, domain.OpChange, "src > shapes > shapes.Point > shapes.Point.<fmt::Display>.fmt()", 18, 20, true},
+		"shapes.Shape":                      {domain.KindEnum, domain.OpChange, "src > shapes > shapes.Shape", 23, 26, false},
+		"shapes.Shape.Square":               {domain.KindEnumMember, domain.OpAdd, "src > shapes > shapes.Shape > shapes.Shape.Square", 25, 25, true},
+		"shapes.origin()":                   {domain.KindFunction, domain.OpChange, "src > shapes > shapes.origin()", 28, 30, true},
+		"shapes.tests.origin_is_zero()":     {domain.KindFunction, domain.OpAdd, "src > shapes > shapes.tests.origin_is_zero()", 36, 39, true},
+		"it":                                {domain.KindModule, domain.OpAdd, "tests > it", 1, 4, true},
+		"it.works()":                        {domain.KindFunction, domain.OpAdd, "tests > it > it.works()", 1, 4, true},
 	}
 	for name, w := range wants {
 		nodes := allNamed(r, name)
@@ -142,7 +142,7 @@ func TestRustChangesBecomeCodeUnits(t *testing.T) {
 				name, n.Kind, n.Op, gotPath, loc.StartLine, loc.EndLine, n.Direct, w.kind, w.op, w.path, w.start, w.end, w.direct)
 		}
 	}
-	for _, name := range []string{"shapes.tests.origin_is_zero", "it.works"} {
+	for _, name := range []string{"shapes.tests.origin_is_zero()", "it.works()"} {
 		if n := allNamed(r, name); len(n) == 1 && !n[0].Test {
 			t.Errorf("%s is a test", name)
 		}
@@ -175,11 +175,35 @@ func TestRustMethodRenameIsRecognized(t *testing.T) {
 	)
 	r := structure(t, s)
 	checkTotals(t, s, r)
-	n := allNamed(r, "cart.Cart.total")
-	if len(n) != 1 || n[0].Op != domain.OpChange || n[0].PreviousName != "cart.Cart.sum" {
+	n := allNamed(r, "cart.Cart.total()")
+	if len(n) != 1 || n[0].Op != domain.OpChange || n[0].PreviousName != "cart.Cart.sum()" {
 		t.Fatalf("a renamed method with an identical body keeps its identity: %+v", n)
 	}
-	if len(allNamed(r, "cart.Cart.sum")) != 0 {
+	if len(allNamed(r, "cart.Cart.sum()")) != 0 {
 		t.Error("the old name must not also appear as removed")
+	}
+}
+
+// A getter often takes its field's name. Replacing a field with a getter must read as a removed
+// field and an added method, never as one unit that changed kind.
+func TestRustFieldReplacedByGetter(t *testing.T) {
+	s := repo(t,
+		map[string]string{"user.rs": "pub struct User {\n    pub name: String,\n}\n"},
+		map[string]string{"user.rs": "pub struct User {\n    first: String,\n}\n\nimpl User {\n    pub fn name(&self) -> &str {\n        &self.first\n    }\n}\n"},
+	)
+	r := structure(t, s)
+	checkTotals(t, s, r)
+	for name, want := range map[string]struct {
+		kind domain.UnitKind
+		op   domain.ChangeOp
+	}{
+		"user.User.name":   {domain.KindField, domain.OpRemove},
+		"user.User.first":  {domain.KindField, domain.OpAdd},
+		"user.User.name()": {domain.KindMethod, domain.OpAdd},
+	} {
+		n := allNamed(r, name)
+		if len(n) != 1 || n[0].Kind != want.kind || n[0].Op != want.op || n[0].PreviousSignature != "" {
+			t.Errorf("%s: %+v, want %s %s", name, n, want.kind, want.op)
+		}
 	}
 }

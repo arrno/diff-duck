@@ -37,22 +37,36 @@ var rustGrammar = Grammar{name: "rust", wasm: rustWasm}
 //   - enum: ENUM; each variant is an ENUM_MEMBER ("lib.E.A").
 //   - trait: TRAIT; required methods are INTERFACE_METHOD, provided (default) methods METHOD,
 //     associated types TYPE, associated consts CONST.
-//   - impl blocks are not units. Their items sit under the implemented type: "lib.Foo.new"
-//     for `impl Foo`, and "lib.Foo.<fmt::Display>.fmt" for `impl fmt::Display for Foo`, so
+//   - impl blocks are not units. Their items sit under the implemented type: "lib.Foo.new()"
+//     for `impl Foo`, and "lib.Foo.<fmt::Display>.fmt()" for `impl fmt::Display for Foo`, so
 //     same-named methods of different trait impls stay distinct. The trait segment is the trait
-//     as written, generics included (<From<u8>>). A method's Parent is the type's unit when the
-//     type is declared in the same scope of the same file; otherwise it is the enclosing scope's
-//     unit, since no type unit exists to attach to. Same-named methods of two inherent impls of
-//     one type (impl Foo<u8> / impl Foo<u16>) share a name, which the differ pairs by content.
-//     The impl header (generics, where clause, attributes) is the module's own code.
+//     with its generics (<From<u8>>), written in one canonical form so reformatting the impl
+//     header never renames its items. A method's Parent is the type's unit when the type is
+//     declared in the same scope of the same file (and is not the impl's own type parameter);
+//     otherwise it is the enclosing scope's unit, since no type unit exists to attach to. The
+//     self type's generic arguments are not part of the name, so same-named items of impls for
+//     Foo<u8> and Foo<u16> share a name, which the differ pairs by content and position. The
+//     impl header (generics, where clause, attributes) is the module's own code.
 //   - free functions FUNCTION; const CONST; static VAR; type alias TYPE; macro_rules! m is a
-//     FUNCTION named "lib.m!" (macros and functions live in different namespaces).
+//     FUNCTION named "lib.m!".
 //   - use, extern crate, `mod x;`, extern blocks, and item-position macro invocations are the
 //     module's own code. Items inside function bodies are part of the function.
 //
+// Every function and method name ends in "()" and every macro name in "!". Rust keeps fields,
+// functions, and macros in separate namespaces, so a getter shares its field's name
+// (struct User { name } with fn name()); the suffix keeps "lib.User.name" and
+// "lib.User.name()" distinct units. An inherent associated const named like one of its enum's
+// variants still shares that variant's name.
+//
 // Every unit's code, range, and hash include its outer attributes (#[derive], #[cfg], ...);
-// its range also includes its outer doc comments, which become Doc. Comments, including doc
-// comments, never change a hash. A file's #![cfg(...)] attributes are its Constraints.
+// its range also includes its outer doc comments, which become Doc. Comments never change a
+// hash, except the fenced code blocks of doc comments: cargo test runs those as doctests, so
+// they count as the unit's code (the file's //! doctests as the module's). A file's
+// #![cfg(...)] attributes are its Constraints.
+//
+// Known limitation: the pinned grammar (tree-sitter-rust v0.24.2, the newest release) rejects
+// a few valid forms, such as a closure parameter list with a trailing comma and Rust 2024
+// `unsafe extern` blocks with `safe fn`. Such a file degrades to a file node with a warning.
 //
 // Tests: files under a tests directory, files with #![cfg(test)], items inside a #[cfg(test)]
 // module or impl, and functions with a #[test]-style attribute (#[test], #[tokio::test], ...).
@@ -97,8 +111,8 @@ func (a *Rust) Analyze(ctx context.Context, p string, src []byte) (domain.FileAn
 		Kind:      domain.KindModule,
 		Name:      module,
 		Signature: "module " + p,
-		Hash:      rsHash(owned).hash(root),
-		Doc:       rsInnerDoc(root),
+		Hash:      hashStrings(rsHash(owned).hash(root), rsDocCode(rsInnerDocs(root))),
+		Doc:       rsDoc(rsInnerDocs(root)),
 		StartLine: 1,
 		EndLine:   lineCount(src),
 		Source:    string(src),
@@ -156,6 +170,16 @@ func (e *rsExtractor) finish(u domain.Unit) domain.Unit {
 	u.File = e.path
 	u.Signature = compact(u.Signature)
 	return u
+}
+
+// hash fingerprints an item with its attributes, leaving out owned members. The code blocks
+// in its doc comments count too: cargo test compiles and runs them as doctests.
+func (it rsItem) hash(owned map[Node]bool, nodes ...Node) string {
+	all := append(append([]Node{}, it.attrs...), it.node)
+	if len(nodes) > 0 {
+		all = append(append([]Node{}, it.attrs...), nodes...)
+	}
+	return hashStrings(rsHash(owned).hash(all...), rsDocCode(it.docs))
 }
 
 // place sets a unit's range and code to the item with its attributes and doc comments.
@@ -257,7 +281,7 @@ func (e *rsExtractor) items(container Node, scope rsScope, owned map[Node]bool) 
 				Name:      domain.QualifiedName(scope.name, name.Text()+"!"),
 				Parent:    scope.parent,
 				Signature: rsAttrText(it) + "macro_rules! " + name.Text(),
-				Hash:      rsHash(nil).hash(append(append([]Node{}, it.attrs...), n)...),
+				Hash:      it.hash(nil),
 				Test:      test,
 			}, it))
 			own()
@@ -279,18 +303,17 @@ func (e *rsExtractor) function(it rsItem, scope, parent string, kind domain.Unit
 		return
 	}
 	body := n.ChildByField("body")
-	nodes := append(append([]Node{}, it.attrs...), n)
 	u := domain.Unit{
 		Kind:      kind,
-		Name:      domain.QualifiedName(scope, nameNode.Text()),
+		Name:      domain.QualifiedName(scope, nameNode.Text()+"()"),
 		Parent:    parent,
 		Signature: rsAttrText(it) + rsHeader(e.src, n, body),
-		Hash:      rsHash(nil).hash(nodes...),
+		Hash:      it.hash(nil),
 		Test:      test,
 	}
 	// A body of one statement, such as "Ok(())", is too common to prove a rename.
 	if !body.IsNull() && len(body.NamedChildren()) >= 2 {
-		u.BodyHash = rsHash(map[Node]bool{nameNode: true}).hash(nodes...)
+		u.BodyHash = it.hash(map[Node]bool{nameNode: true})
 	}
 	e.units = append(e.units, e.place(u, it))
 }
@@ -307,7 +330,7 @@ func (e *rsExtractor) simple(it rsItem, scope, parent string, kind domain.UnitKi
 		Name:      domain.QualifiedName(scope, nameNode.Text()),
 		Parent:    parent,
 		Signature: rsAttrText(it) + strings.TrimSuffix(it.node.Text(), ";"),
-		Hash:      rsHash(nil).hash(append(append([]Node{}, it.attrs...), it.node)...),
+		Hash:      it.hash(nil),
 		Test:      test,
 	}, it))
 }
@@ -315,7 +338,7 @@ func (e *rsExtractor) simple(it rsItem, scope, parent string, kind domain.UnitKi
 // container records a type-like unit whose members were extracted first, hashing only its own
 // code.
 func (e *rsExtractor) container(slot int, it rsItem, u domain.Unit, members map[Node]bool) {
-	u.Hash = rsHash(members).hash(append(append([]Node{}, it.attrs...), it.node)...)
+	u.Hash = it.hash(members)
 	e.units[slot] = e.place(u, it)
 }
 
@@ -359,14 +382,13 @@ func (e *rsExtractor) structure(it rsItem, scope rsScope, test bool) {
 }
 
 func (e *rsExtractor) field(it rsItem, parent, short string, nodes []Node, test bool) {
-	all := append(append([]Node{}, it.attrs...), nodes...)
 	last := nodes[len(nodes)-1]
 	u := domain.Unit{
 		Kind:      domain.KindField,
 		Name:      domain.QualifiedName(parent, short),
 		Parent:    parent,
 		Signature: rsAttrText(it) + spanText(e.src, nodes[0], last),
-		Hash:      rsHash(nil).hash(all...),
+		Hash:      it.hash(nil, nodes...),
 		Test:      test,
 	}
 	it.node = last
@@ -435,7 +457,7 @@ func (e *rsExtractor) enum(it rsItem, scope rsScope, test bool) {
 			Name:      domain.QualifiedName(name, vname.Text()),
 			Parent:    name,
 			Signature: rsAttrText(v) + v.node.Text(),
-			Hash:      rsHash(nil).hash(append(append([]Node{}, v.attrs...), v.node)...),
+			Hash:      v.hash(nil),
 			Test:      test || v.test(),
 		}, v))
 		members[v.node] = true
@@ -483,12 +505,13 @@ func (e *rsExtractor) impl(it rsItem, scope rsScope, local map[string]bool, test
 	}
 	typeScope := domain.QualifiedName(scope.name, typeName)
 	parent := scope.parent
-	if plain && local[typeName] {
+	// impl<T> Show for T is a blanket impl, even beside a struct named T.
+	if plain && local[typeName] && !rsDeclaresTypeParam(n.ChildByField("type_parameters"), typeName) {
 		parent = typeScope
 	}
 	itemScope := typeScope
 	if trait := n.ChildByField("trait"); !trait.IsNull() {
-		itemScope = domain.QualifiedName(typeScope, "<"+compact(trait.Text())+">")
+		itemScope = domain.QualifiedName(typeScope, "<"+rsTypeName(trait)+">")
 	}
 	e.associated(body, itemScope, parent, test, owned, domain.KindMethod)
 }
@@ -518,8 +541,8 @@ func (e *rsExtractor) associated(body Node, scope, parent string, test bool, own
 }
 
 // rsSelfType names an impl's type: the type's own name for a plain or generic path ("Foo" for
-// Foo<T>), else its text ("&'a str", "[T]"). plain reports a bare identifier, which may name a
-// type declared beside the impl.
+// Foo<T>), else the type in canonical form ("&'a str", "[T]"). plain reports a bare identifier,
+// which may name a type declared beside the impl.
 func rsSelfType(t Node) (name string, plain bool) {
 	if t.Type() == "generic_type" {
 		t = t.ChildByField("type")
@@ -530,7 +553,54 @@ func rsSelfType(t Node) (name string, plain bool) {
 	case "type_identifier":
 		return t.Text(), true
 	}
-	return compact(t.Text()), false
+	return rsTypeName(t), false
+}
+
+// rsTypeName writes a type the same way however it is formatted: its tokens, without comments
+// or ignorable commas, with one space only between two words and after each comma. A rewrapped
+// impl header therefore keeps its items' names.
+func rsTypeName(t Node) string {
+	var b strings.Builder
+	var walk func(Node)
+	walk = func(n Node) {
+		if n.IsExtra() {
+			return
+		}
+		kids := n.Children()
+		if len(kids) > 0 {
+			for _, c := range kids {
+				walk(c)
+			}
+			return
+		}
+		tok := n.Text()
+		if tok == "," {
+			if !rsIgnoredComma(n) {
+				b.WriteString(", ")
+			}
+			return
+		}
+		if s := b.String(); s != "" && rsWordEnd(s[len(s)-1]) && tok != "" && rsWordEnd(tok[0]) {
+			b.WriteByte(' ')
+		}
+		b.WriteString(tok)
+	}
+	walk(t)
+	return strings.TrimSpace(b.String())
+}
+
+func rsWordEnd(c byte) bool {
+	return c == '_' || c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= 0x80
+}
+
+// rsDeclaresTypeParam reports whether an impl's generics declare a type parameter named name.
+func rsDeclaresTypeParam(params Node, name string) bool {
+	for _, p := range params.NamedChildren() {
+		if p.Type() == "type_parameter" && p.ChildByField("name").Text() == name {
+			return true
+		}
+	}
+	return false
 }
 
 // rsHeader returns an item's text before its body, or the whole item without a trailing
@@ -592,27 +662,29 @@ func rsIgnoredComma(n Node) bool {
 		return true
 	case "token_tree", "token_tree_pattern", "token_repetition", "token_repetition_pattern":
 		return false
-	case "tuple_type", "tuple_pattern", "tuple_expression":
-		if len(parent.NamedChildren()) < 2 {
-			return false
-		}
 	}
-	after := false
-	for _, c := range parent.Children() {
-		if !after {
-			after = c == n
-			continue
-		}
-		if c.IsExtra() {
-			continue
-		}
-		switch c.Type() {
-		case ")", "]", "}", ">", "|":
-			return true
-		}
+	// Only the next sibling is looked at, so a list of n items costs O(n), not O(n^2).
+	switch rsNextSibling(n).Type() {
+	case "", ")", "]", "}", ">", "|":
+	default:
 		return false
 	}
-	return after
+	switch parent.Type() {
+	case "tuple_type", "tuple_pattern", "tuple_expression":
+		// Reached once per tuple, at its last comma.
+		return len(parent.NamedChildren()) >= 2
+	}
+	return true
+}
+
+// rsNextSibling returns the next sibling that is not an extra, or a null node.
+func rsNextSibling(n Node) Node {
+	for i := n.rec().next; i != -1; i = n.t.nodes[i].next {
+		if c := (Node{t: n.t, i: i}); !c.IsExtra() {
+			return c
+		}
+	}
+	return Node{}
 }
 
 // rsIsOuterDoc reports whether a comment is an outer doc comment (/// or /** */).
@@ -638,15 +710,34 @@ func rsDoc(comments []Node) string {
 	return strings.TrimSpace(strings.Join(lines, "\n"))
 }
 
-// rsInnerDoc returns a file's own documentation, its //! and /*! */ comments.
-func rsInnerDoc(root Node) string {
+// rsInnerDocs returns a file's own documentation comments, its //! and /*! */ comments.
+func rsInnerDocs(root Node) []Node {
 	var docs []Node
 	for _, c := range root.Children() {
 		if (c.Type() == "line_comment" || c.Type() == "block_comment") && !c.ChildByField("inner").IsNull() {
 			docs = append(docs, c)
 		}
 	}
-	return rsDoc(docs)
+	return docs
+}
+
+// rsDocCode returns the fenced code blocks in doc comments, which cargo test runs as doctests,
+// so a change to them is a code change. Prose stays documentation.
+func rsDocCode(comments []Node) string {
+	var code strings.Builder
+	in := false
+	for _, l := range strings.Split(rsDoc(comments), "\n") {
+		t := strings.TrimSpace(l)
+		if strings.HasPrefix(t, "```") || strings.HasPrefix(t, "~~~") {
+			in = !in
+			code.WriteString("```\n")
+			continue
+		}
+		if in {
+			code.WriteString(strings.Join(strings.Fields(l), " ") + "\n")
+		}
+	}
+	return code.String()
 }
 
 // rsConstraints returns the file's #![cfg(...)] attributes, which decide whether it compiles.
@@ -675,7 +766,8 @@ func rsAttrPath(item Node) string {
 }
 
 // rsIsTestAttr reports whether an attribute marks test code: #[test] and its async or framework
-// forms (#[tokio::test]), or #[cfg(test)] alone or in all(...), but not under not(...).
+// forms (#[tokio::test]), or #[cfg(test)] alone or in all(...). Under not(...) it is not test
+// code, and under any(...) it is compiled outside tests too, so neither counts.
 func rsIsTestAttr(item Node) bool {
 	p := rsAttrPath(item)
 	if p == "test" || strings.HasSuffix(p, "::test") {
