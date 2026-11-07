@@ -184,3 +184,13 @@ provider with no key saved and none given is a 400.
   `claude`/`codex` on PATH.
 - **Reassigned to S5:** delete S6's stand-in availability, share serve's one keychain as KeySource,
   fix pinned Save (skip availability and key checks while pinned), and add a settings-survive-restart test.
+- **S2 done** (merged). One wasm32-wasi module per language under `internal/adapters/treesitter/wasm/`,
+  built by `make treesitter-wasm GRAMMAR=<lang>` (zig 0.13.0, sources via the Go module proxy).
+  New kinds: MODULE, CLASS, ENUM, ENUM_MEMBER, TRAIT, RECORD, PROPERTY. Domain module naming rule
+  (`domain.QualifiedName` / `Requalify`). `SourceAnalyzer.Analyze(ctx, path, src)`.
+  `LibraryDeps.Analyzers` is a list; analyzers are registered in `internal/controller/cli/analyzers.go`.
+- **Decision for S7 (C#/Java):** `PackageRef.Dir` = the file's directory; `PackageRef.Name` = the declared
+  namespace/package (directory name when none is declared). The declared name is the language's real
+  structure (I2); keying on Dir too keeps files in different directories apart, as Go does.
+- **Known limitations (pre-existing, outside the epic):** goanalysis copies a multi-name `var` statement
+  once per name (quadratic memory); a diff has no overall parse-time budget.
