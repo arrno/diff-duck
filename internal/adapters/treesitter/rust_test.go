@@ -642,18 +642,52 @@ func TestRustBlanketImplIsNotUnderSameNamedStruct(t *testing.T) {
 }
 
 // Deciding whether a comma counts must not rescan its list, or one long array literal makes
-// analysis quadratic.
+// analysis quadratic. Wall-clock bounds fail on a loaded machine, so this compares growth: four
+// times the items must cost about four times the work, never the sixteen times of a rescan.
+// The two sizes are timed alternately, each keeping its fastest run, so load slows both alike;
+// a ratio spoiled by a burst of load is measured again, while a rescan fails every time.
 func TestRustLongListsAnalyzeInLinearTime(t *testing.T) {
 	rt := newTestRuntime(t)
-	for name, src := range map[string]string{
-		"array":      "const X: [u8; 60000] = [" + strings.Repeat("0, ", 60000) + "];\n",
-		"tuples":     "const X: &[(char, char)] = &[" + strings.Repeat("('a', 'b'), ", 30000) + "];\n",
-		"parameters": "fn f(" + strings.Repeat("a: u8, ", 30000) + ") {\n    let x = 1;\n    x\n}\n",
-	} {
+	parse := func(src string) *Tree {
+		tree, err := rt.Parse(context.Background(), rustGrammar, []byte(src))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return tree
+	}
+	timed := func(tree *Tree) time.Duration {
 		start := time.Now()
-		analyzeRs(t, rt, "m.rs", src)
-		if d := time.Since(start); d > 5*time.Second {
-			t.Errorf("%s: %d KB took %v", name, len(src)>>10, d)
+		if _, err := extractRust(context.Background(), tree, "m.rs"); err != nil {
+			t.Fatal(err)
+		}
+		return time.Since(start)
+	}
+	ratio := func(small, large *Tree) (float64, time.Duration, time.Duration) {
+		fastSmall, fastLarge := time.Duration(1<<63-1), time.Duration(1<<63-1)
+		for range 5 {
+			fastSmall = min(fastSmall, timed(small))
+			fastLarge = min(fastLarge, timed(large))
+		}
+		return float64(fastLarge) / float64(fastSmall), fastSmall, fastLarge
+	}
+	for name, src := range map[string]func(n int) string{
+		"array": func(n int) string { return "const X: [u8; 1] = [" + strings.Repeat("0, ", n) + "];\n" },
+		"tuples": func(n int) string {
+			return "const X: &[(char, char)] = &[" + strings.Repeat("('a', 'b'), ", n) + "];\n"
+		},
+		"parameters": func(n int) string { return "fn f(" + strings.Repeat("a: u8, ", n) + ") {\n    let x = 1;\n    x\n}\n" },
+	} {
+		const n = 4000
+		small, large := parse(src(n)), parse(src(4*n))
+		var r float64
+		var ts, tl time.Duration
+		for range 3 {
+			if r, ts, tl = ratio(small, large); r <= 9 {
+				break
+			}
+		}
+		if r > 9 {
+			t.Errorf("%s: %d items took %v, %d took %v: %.1f times as long", name, n, ts, 4*n, tl, r)
 		}
 	}
 }

@@ -31,6 +31,9 @@ func NewStructuralDiffer(repo ports.RepositoryReader, analyzers ...ports.SourceA
 type keyedUnit struct {
 	domain.Unit
 	key string
+	// members are the units directly inside a container, such as a module's functions and
+	// classes, in source order.
+	members []*keyedUnit
 }
 
 type analyzedFile struct {
@@ -89,12 +92,13 @@ func (d *StructuralDiffer) Build(ctx context.Context, baseSHA, headSHA string, c
 	for _, f := range files {
 		b.attributeLines(f)
 	}
+	declared := d.declaredPackages(ctx)
 	b.finish(func(ref domain.PackageRef, op domain.ChangeOp) bool {
 		sha := baseSHA
 		if op == domain.OpRemove {
 			sha = headSHA
 		}
-		return d.packageExists(ctx, sha, ref)
+		return declared(sha, ref)
 	})
 	if err := ctx.Err(); err != nil {
 		return nil, nil, err
@@ -149,37 +153,6 @@ func (d *StructuralDiffer) analyze(ctx context.Context, baseSHA, headSHA string,
 	}
 	file.generated = generated
 	return file, nil, nil
-}
-
-// packageExists reports whether a package has source at a commit. Anything unclear counts as
-// existing, since claiming a package was added or removed needs positive evidence.
-func (d *StructuralDiffer) packageExists(ctx context.Context, sha string, ref domain.PackageRef) bool {
-	paths, err := d.repo.ListFiles(ctx, sha, ref.Dir)
-	if err != nil {
-		return true
-	}
-	for _, p := range paths {
-		for _, analyzer := range d.analyzers {
-			if !analyzer.Supports(p) {
-				continue
-			}
-			src, err := d.repo.ReadFile(ctx, sha, p)
-			if err != nil {
-				return true
-			}
-			analysis, err := analyzer.Analyze(ctx, p, src)
-			if err != nil || analysis.Package == ref {
-				return true
-			}
-			// A file can declare several packages, such as C# namespaces; each unit names its own.
-			for _, u := range analysis.Units {
-				if u.Package == ref {
-					return true
-				}
-			}
-		}
-	}
-	return false
 }
 
 func (d *StructuralDiffer) analyzerFor(change domain.FileChange) ports.SourceAnalyzer {
@@ -281,6 +254,11 @@ func (b *treeBuilder) diffUnits(files []*analyzedFile) {
 			after[u.key] = u
 			byName[u.Package.Key()+"::"+u.Name] = append(byName[u.Package.Key()+"::"+u.Name], u)
 		}
+	}
+
+	for _, f := range files {
+		linkMembers(f.before)
+		linkMembers(f.after)
 	}
 
 	var changed []*keyedUnit
@@ -709,7 +687,7 @@ func newUnitNode(u *keyedUnit, op domain.ChangeOp) *domain.Node {
 		Direct:    true,
 		Test:      u.Test,
 		Doc:       u.Doc,
-		Source:    u.Source,
+		Source:    ownSource(u),
 	}
 	side := "head"
 	if op == domain.OpRemove {

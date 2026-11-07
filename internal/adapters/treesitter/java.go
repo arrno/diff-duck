@@ -32,8 +32,10 @@ var javaGrammar = Grammar{name: "java", wasm: javaWasm}
 //   - Fields -> FIELD, except `static final` fields and every interface or annotation-type
 //     field (implicitly static final) -> CONST. One declaration of several variables yields
 //     one unit per variable; they share the declaration's lines.
-//   - Enum constants -> ENUM_MEMBER; a constant's class body belongs to the constant. Methods,
-//     fields, and constructors after the constants are members of the enum.
+//   - Enum constants -> ENUM_MEMBER. The members of a constant's class body are units under the
+//     constant, such as "Op.MINUS.apply(int,int)"; the rest of the body, such as an
+//     initializer, is the constant's own code. Methods, fields, and constructors after the
+//     constants are members of the enum.
 //   - Record components -> FIELD, spanning the component. Their order is the record's own code,
 //     since it is the canonical constructor's parameter order.
 //   - Every method, constructor, and annotation element is named with its parameter types, as
@@ -74,7 +76,7 @@ func extractJava(ctx context.Context, tree *Tree, p string) (domain.FileAnalysis
 	if name := javaPackageName(root); name != "" {
 		pkg.Name = name
 	}
-	e := &javaExtractor{fileUnits{ctx: ctx, path: p, pkg: pkg, test: isJavaTest(p)}}
+	e := &javaExtractor{newFileUnits(ctx, tree, p, pkg, isJavaTest(p))}
 	// A file is generated when its header says so, or when every type it declares is annotated
 	// @Generated. One annotated type beside hand-written ones does not hide the others.
 	types, annotated := 0, 0
@@ -121,7 +123,7 @@ func (e *javaExtractor) typeDecl(n, doc Node, scope string) {
 	if nameNode.IsNull() {
 		return
 	}
-	name := javaQualify(scope, nameNode.Text())
+	name := e.qualify(scope, nameNode.Text())
 	kind := javaTypeKinds[n.Type()]
 	body := n.ChildByField("body")
 	slot := e.reserve()
@@ -187,7 +189,7 @@ func (e *javaExtractor) callable(n, doc Node, scope string, iface bool, canonica
 	}
 	u := domain.Unit{
 		Kind:      kind,
-		Name:      javaQualify(scope, javaCallableName(n)+"("+params+")"),
+		Name:      e.qualify(scope, javaCallableName(n)+"("+params+")"),
 		Parent:    scope,
 		Signature: javaHeader(n, body),
 		Hash:      javaHash(nil).hash(n),
@@ -236,7 +238,7 @@ func (e *javaExtractor) fields(n, doc Node, scope string, constant bool) {
 		}
 		u := base
 		u.Kind = kind
-		u.Name = javaQualify(scope, nameNode.Text())
+		u.Name = e.qualify(scope, nameNode.Text())
 		u.Parent = scope
 		u.Signature = prefix + " " + nameNode.Text() + javaCompactText(d.ChildByField("dimensions"))
 		u.Hash = hashStrings(shared, javaHash(nil).hash(d))
@@ -248,7 +250,7 @@ func (e *javaExtractor) fields(n, doc Node, scope string, constant bool) {
 func (e *javaExtractor) component(c Node, name, scope string) {
 	u := domain.Unit{
 		Kind:      domain.KindField,
-		Name:      javaQualify(scope, name),
+		Name:      e.qualify(scope, name),
 		Parent:    scope,
 		Signature: c.Text(),
 		Hash:      javaHash(nil).hash(c),
@@ -262,22 +264,32 @@ func (e *javaExtractor) enumConstant(n, doc Node, scope string) {
 	if nameNode.IsNull() {
 		return
 	}
+	name := e.qualify(scope, nameNode.Text())
+	body := n.ChildByField("body")
+	slot := e.reserve()
+	// A constant's class body holds methods and fields like any class's, and each is its own
+	// unit, so a change to one is explained as that member's.
+	owned := map[Node]bool{}
+	if !body.IsNull() {
+		e.members(body, name, false, "", owned)
+	}
 	u := domain.Unit{
 		Kind:      domain.KindEnumMember,
-		Name:      javaQualify(scope, nameNode.Text()),
+		Name:      name,
 		Parent:    scope,
-		Signature: javaHeader(n, n.ChildByField("body")),
-		Hash:      javaHash(nil).hash(n),
+		Signature: javaHeader(n, body),
+		Hash:      javaHash(owned).hash(n),
 	}
 	e.span(&u, n, doc)
-	e.units = append(e.units, e.finish(u))
+	e.units[slot] = e.finish(u)
 }
 
-func javaQualify(scope, name string) string {
+// qualify names a declaration inside a type; a top-level type has its simple name.
+func (e *javaExtractor) qualify(scope, name string) string {
 	if scope == "" {
 		return name
 	}
-	return domain.QualifiedName(scope, name)
+	return e.fileUnits.qualify(scope, name)
 }
 
 // declarations calls visit for each declaration in a program or type body, with the Javadoc

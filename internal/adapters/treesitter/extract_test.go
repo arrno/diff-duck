@@ -160,6 +160,85 @@ func TestNestedDeclarationsShareOneCopyOfTheFile(t *testing.T) {
 	}
 }
 
+// nestedNames returns a file whose scopes nest depth levels deep, each named name, so every
+// level's qualified name repeats all the names around it.
+func nestedNames(lang string, depth int, name string) string {
+	var b strings.Builder
+	switch lang {
+	case "python":
+		for i := range depth {
+			fmt.Fprintf(&b, "%sclass %s:\n", strings.Repeat(" ", i), name)
+		}
+		fmt.Fprintf(&b, "%spass\n", strings.Repeat(" ", depth))
+	case "typescript":
+		for range depth {
+			fmt.Fprintf(&b, "namespace %s {\nexport class C {}\n", name)
+		}
+		b.WriteString(strings.Repeat("}\n", depth))
+	case "rust":
+		for range depth {
+			fmt.Fprintf(&b, "mod %s {\nstruct S;\n", name)
+		}
+		b.WriteString(strings.Repeat("}\n", depth))
+	case "csharp", "java":
+		b.WriteString(strings.Repeat("class "+name+"{", depth))
+		b.WriteString(strings.Repeat("}", depth))
+	}
+	return b.String()
+}
+
+// Qualified names repeat their enclosing scopes, so nesting long names makes them grow with the
+// square of a file's size. Every language charges them to one budget linear in the file's size
+// and refuses a file that outgrows it, rather than holding gigabytes of names.
+func TestQualifiedNamesAreBoundedInEveryLanguage(t *testing.T) {
+	rt := newTestRuntime(t)
+	for _, lc := range languages {
+		t.Run(lc.name, func(t *testing.T) {
+			// About 450 KB; unbounded, its names would take about 67 MB.
+			src := nestedNames(lc.name, 300, strings.Repeat("N", 1500))
+			tree, err := rt.Parse(context.Background(), lc.grammar, []byte(src))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var before, after goruntime.MemStats
+			goruntime.GC()
+			goruntime.ReadMemStats(&before)
+			_, err = lc.extract(context.Background(), tree, lc.path)
+			goruntime.ReadMemStats(&after)
+			if !errors.Is(err, ErrTooLarge) {
+				t.Fatalf("names that grow far beyond the file are refused: %v", err)
+			}
+			if alloc := after.TotalAlloc - before.TotalAlloc; alloc > 64<<20 {
+				t.Errorf("refusing long names allocated %d MB", alloc>>20)
+			}
+			// The same nesting with short names is ordinary code.
+			short := nestedNames(lc.name, 300, "N")
+			tree, err = rt.Parse(context.Background(), lc.grammar, []byte(short))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := lc.extract(context.Background(), tree, lc.path); err != nil {
+				t.Errorf("short names nested as deeply are analyzed: %v", err)
+			}
+		})
+	}
+}
+
+// A C# namespace's name repeats the namespaces around it, so nested namespaces are charged to
+// the same budget, though they are not units.
+func TestNestedCSharpNamespacesAreBounded(t *testing.T) {
+	rt := newTestRuntime(t)
+	name := strings.Repeat("N", 1500)
+	src := strings.Repeat("namespace "+name+"{", 300) + "class C{}" + strings.Repeat("}", 300)
+	tree, err := rt.Parse(context.Background(), csharpGrammar, []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := extractCSharp(context.Background(), tree, "pkg/M.cs"); !errors.Is(err, ErrTooLarge) {
+		t.Fatalf("namespace names that grow far beyond the file are refused: %v", err)
+	}
+}
+
 // cancelAfter is a context that reports cancellation once Err has been asked a number of
 // times, so a test can cancel extraction part way through without racing it.
 type cancelAfter struct {
