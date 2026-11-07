@@ -131,7 +131,9 @@ func (c *client) attempt(ctx context.Context, payload []byte, out *wireResponse)
 	}
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes+1))
 	if err != nil {
-		return retryableTransport(err), 0, fmt.Errorf("openai api: reading the response: %s", c.redact(transportText(err)))
+		// The server already finished, and billed, this generation: sending it again would
+		// pay twice, so a broken success body is not retried.
+		return false, 0, fmt.Errorf("openai api: reading the response: %s", c.redact(transportText(err)))
 	}
 	if len(raw) > maxBodyBytes {
 		return false, 0, fmt.Errorf("openai api: the response exceeded %d bytes", maxBodyBytes)

@@ -247,3 +247,64 @@ func TestRetryAfterParsing(t *testing.T) {
 		}
 	}
 }
+
+func TestABrokenSuccessBodyIsNotResent(t *testing.T) {
+	var n atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n.Add(1)
+		// Promise more than is sent, then drop the connection mid-body.
+		w.Header().Set("Content-Length", "1000")
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte(`{"status":"completed"`))
+		conn, _, _ := w.(http.Hijacker).Hijack()
+		_ = conn.Close()
+	}))
+	t.Cleanup(srv.Close)
+	m, _ := newWithOptions(key, "gpt-test", "", withBaseURL(srv.URL), withBackoff(time.Millisecond))
+	if _, err := m.Complete(context.Background(), ports.ModelRequest{Schema: schema}); err == nil || n.Load() != 1 {
+		t.Fatalf("err=%v attempts=%d", err, n.Load())
+	}
+}
+
+func TestAnErrorBodyIsReadOnlyUpToItsBound(t *testing.T) {
+	// The error object starts past the bound, so a bounded read never sees it.
+	body := strings.Repeat(" ", maxErrorBodyBytes) + `{"error":{"code":"marker"}}`
+	srv, _ := scripted(t, reply{status: 400, body: body})
+	m, _ := newWithOptions(key, "gpt-test", "", withBaseURL(srv.URL))
+	if _, err := m.Complete(context.Background(), ports.ModelRequest{Schema: schema}); err == nil || strings.Contains(err.Error(), "marker") {
+		t.Fatalf("the error body must be read only up to its bound: %v", err)
+	}
+}
+
+type timeoutErr struct{}
+
+func (timeoutErr) Error() string   { return "timeout" }
+func (timeoutErr) Timeout() bool   { return true }
+func (timeoutErr) Temporary() bool { return true }
+
+func TestATimeoutIsNotRetried(t *testing.T) {
+	if retryableTransport(timeoutErr{}) {
+		t.Fatal("a timeout spent the whole request budget and must not be retried")
+	}
+	if !retryableTransport(errors.New("connection reset by peer")) {
+		t.Fatal("a connection failure is worth another attempt")
+	}
+}
+
+func TestADeadlineDuringARequestIsReportedAsSuch(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The server notices the client hanging up only once the body is consumed.
+		_, _ = io.Copy(io.Discard, r.Body)
+		select {
+		case <-r.Context().Done():
+		case <-time.After(5 * time.Second):
+		}
+	}))
+	t.Cleanup(srv.Close)
+	m, _ := newWithOptions(key, "gpt-test", "", withBaseURL(srv.URL), withBackoff(time.Millisecond))
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	if _, err := m.Complete(ctx, ports.ModelRequest{Schema: schema}); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("deadline: %v", err)
+	}
+}
