@@ -255,6 +255,9 @@ test("picks commits, creates a diff, and opens it", async ({ page }) => {
   await expect(page.getByTestId("overview")).toHaveText("Scripted overview of the change.");
   await expect(page).toHaveTitle(/ · DiffDuck$/);
   await expect(page.getByTestId("outcomes")).toBeVisible();
+  // The run records the saved reading level; the pinned scripted adapter is no provider.
+  await expect(page.getByTestId("generation")).toContainText("Reading level: 6th grade.");
+  await expect(page.getByTestId("generation")).not.toContainText("Provider:");
   // The delete button sits with the tree's other controls, and the name leads home.
   const controls = page.locator("#changes").getByRole("button", { name: "Expand all" }).locator("..");
   await expect(controls.getByRole("button", { name: "Delete" })).toBeVisible();

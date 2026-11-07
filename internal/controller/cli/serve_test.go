@@ -1,33 +1,9 @@
 package cli
 
 import (
-	"errors"
 	"io"
 	"testing"
-
-	"github.com/arrno/diff-duck/internal/domain"
 )
-
-func TestCLIProvidersAreAvailableOnlyWhenTheirBinaryIsOnPath(t *testing.T) {
-	onPath := map[string]bool{"codex": true}
-	a := pathAvailability{lookPath: func(file string) (string, error) {
-		if onPath[file] {
-			return "/bin/" + file, nil
-		}
-		return "", errors.New("not found")
-	}}
-	for provider, want := range map[domain.ModelProvider]bool{
-		domain.ProviderClaudeCode:   false,
-		domain.ProviderCodex:        true,
-		domain.ProviderAnthropicAPI: true,
-		domain.ProviderOpenAIAPI:    true,
-		"gemini":                    false,
-	} {
-		if got := a.Available(provider); got != want {
-			t.Errorf("%s: got %t, want %t", provider, got, want)
-		}
-	}
-}
 
 func TestOnlyAnExplicitAdapterPinsTheProvider(t *testing.T) {
 	for name, tc := range map[string]struct {

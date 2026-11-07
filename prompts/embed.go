@@ -5,5 +5,5 @@ import "embed"
 
 // Default holds the built-in variant under default/.
 //
-//go:embed default/*.md
+//go:embed default/*.md default/reading-levels/*.md
 var Default embed.FS

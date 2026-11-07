@@ -101,6 +101,10 @@ func (k *SettingsKeeper) Current(ctx context.Context) (SettingsView, error) {
 // saved for the provider first. An API provider cannot be saved without a key, and an
 // unavailable provider cannot be chosen. The key is saved before the settings, so if saving
 // the settings then fails, the key stays saved and retrying succeeds.
+//
+// While the app is pinned, runs ignore the saved provider, so it is saved without the
+// availability and key checks; that keeps the reading level savable. Unknown values and a
+// key given for a provider that takes none are still rejected.
 func (k *SettingsKeeper) Save(ctx context.Context, provider, readingLevel, apiKey string) (SettingsView, error) {
 	settings, err := domain.ParseModelSettings(provider, readingLevel)
 	if err != nil {
@@ -111,10 +115,11 @@ func (k *SettingsKeeper) Save(ctx context.Context, provider, readingLevel, apiKe
 	if key != "" && !p.NeedsKey() {
 		return SettingsView{}, fmt.Errorf("%w: %s does not use an API key", ErrInvalidSettings, p.Label())
 	}
-	if !k.deps.Availability.Available(p) {
+	pinned := k.deps.Pinned != ""
+	if !pinned && !k.deps.Availability.Available(p) {
 		return SettingsView{}, fmt.Errorf("%w: %s", ErrProviderUnavailable, p.Label())
 	}
-	if p.NeedsKey() {
+	if p.NeedsKey() && (!pinned || key != "") {
 		if err := k.keep(p, key); err != nil {
 			return SettingsView{}, err
 		}
