@@ -29,3 +29,6 @@ checks its sha256). The same inputs produce byte-identical modules.
 
 Rebuild one language with `make treesitter-wasm GRAMMAR=python`, or all with
 `make treesitter-wasm`.
+
+typescript.wasm and tsx.wasm are the two dialects of one grammar module, tree-sitter-typescript;
+LICENSES/typescript.txt and LICENSES/tsx.txt hold its one licence.

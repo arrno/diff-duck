@@ -90,6 +90,7 @@ build() {
   srcdir="$(manifest_value "$manifest" GRAMMAR_SRC)"
   symbol="$(manifest_value "$manifest" GRAMMAR_SYMBOL)"
   [[ "$symbol" =~ ^tree_sitter_[a-z_]+$ ]] || { echo "$manifest: bad GRAMMAR_SYMBOL" >&2; exit 1; }
+  [[ "$srcdir" =~ ^[a-z_]+(/[a-z_]+)*$ ]] || { echo "$manifest: bad GRAMMAR_SRC" >&2; exit 1; }
   grammar="$(module_dir "$module" "$version")"
   local sources=("$grammar/$srcdir/parser.c")
   [ -f "$grammar/$srcdir/scanner.c" ] && sources+=("$grammar/$srcdir/scanner.c")
@@ -100,16 +101,29 @@ build() {
   mkdir -p "$b"
   cp -R "$core/src" "$b/core-src"
   cp -R "$core/include" "$b/core-include"
-  mkdir -p "$b/grammar"
-  cp -R "$grammar/$srcdir/." "$b/grammar/"
+  # GRAMMAR_SHARED (optional) lists module directories the sources include by relative path,
+  # such as tree-sitter-typescript's ../../common/scanner.h. The sources then keep their place
+  # in the module's layout (zig resolves "../" lexically, so a symlink would not do).
+  local shared gdir=grammar
+  shared="$(grep -E '^GRAMMAR_SHARED=' "$manifest" | head -n1 | cut -d= -f2- || true)"
+  if [ -n "$shared" ]; then
+    [[ "$shared" =~ ^[a-z_]+( [a-z_]+)*$ ]] || { echo "$manifest: bad GRAMMAR_SHARED" >&2; exit 1; }
+    mkdir -p "$b/module/$srcdir"
+    cp -R "$grammar/$srcdir/." "$b/module/$srcdir/"
+    for d in $shared; do cp -R "$grammar/$d" "$b/module/$d"; done
+    gdir="module/$srcdir"
+  else
+    mkdir -p "$b/grammar"
+    cp -R "$grammar/$srcdir/." "$b/grammar/"
+  fi
   cp "$shim" "$b/shim.c"
   chmod -R u+w "$b" # module cache files are read-only
-  local rel=(grammar/parser.c)
-  [ -f "$b/grammar/scanner.c" ] && rel+=(grammar/scanner.c)
+  local rel=("$gdir/parser.c")
+  [ -f "$b/$gdir/scanner.c" ] && rel+=("$gdir/scanner.c")
 
   (cd "$b" && "$zig" cc --target=wasm32-wasi-musl -mexec-model=reactor -Os -std=c11 \
     -DHAVE_ENDIAN_H -D_POSIX_C_SOURCE=200112L -D_DEFAULT_SOURCE -DNDEBUG "-DTS_LANGUAGE=$symbol" \
-    -Icore-include -Icore-src -Igrammar \
+    -Icore-include -Icore-src "-I$gdir" \
     shim.c core-src/lib.c "${rel[@]}" -o module.wasm \
     -Wl,--no-entry -Wl,--strip-all -Wl,-z,stack-size=1048576 \
     -Wl,--export=dd_parse -Wl,--export=dd_result -Wl,--export=dd_status \
