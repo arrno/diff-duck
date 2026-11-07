@@ -288,3 +288,15 @@ the real OS keychain; `make verify` uses the mock. Recorded as a known limitatio
   (a 1.9 MB C# file can still produce about 236 MB of output).
 
 All integrated-review findings are resolved or recorded. `make verify`: VERIFIED (39 Playwright).
+
+## Verification (d89beb2): PASS except B5 partial
+
+An independent verifier drove the CLI, app commands, HTTP API and browser UI against an
+eight-language fixture. B1–B4, B6–B9 and K1–K5 PASS; the A1–A18 regression checks PASS; no defects.
+B5 is partial: saving, never returning and clearing a key were verified with the in-memory
+keychain, but surviving a restart in the real OS keychain was not exercised; that is covered only by
+the opt-in `go test -tags keychain ./internal/adapters/keyring`. Real runs: Claude Code at 2nd
+grade and PhD, and Codex at 6th grade, 4 calls each, with the wording visibly changing by level.
+API providers were proven at the network boundary only (no paid calls).
+Cosmetic follow-ups: a C# parse warning cites line 1 rather than the error line; a logged-out
+Claude CLI reads "claude reported success: Not logged in".
