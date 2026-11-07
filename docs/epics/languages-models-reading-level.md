@@ -217,3 +217,9 @@ provider with no key saved and none given is a 400.
 - **For integration:** move the parse preamble and reserve/finish scaffolding duplicated across
   the language extractors into `extract.go` once all languages land. Go-side extraction after the
   WASM parse doesn't check ctx (applies to all tree-sitter languages).
+- **S7b Rust done** (merged). File = MODULE; inline `mod` flattened into names (one MODULE per
+  file); impl items under their type, trait impls as `Foo.<fmt::Display>.fmt()`; every fn name
+  ends in `()` so getters can't collide with fields; doctests are hashed as code. Binary +1.24 MiB.
+- **For integration:** unify the MODULE signature format across Python/JS/Rust; move
+  `rsNextSibling` into `tree.go`; share the package-ref, reserve/finish, and generated-header code in
+  `extract.go`. Process lesson: give each parallel agent its own scratch directory (they collided).
