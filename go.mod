@@ -4,15 +4,18 @@ go 1.26.2
 
 require (
 	github.com/anthropics/anthropic-sdk-go/v2 v2.6.0
+	github.com/zalando/go-keyring v0.2.8
 	modernc.org/sqlite v1.61.1
 )
 
 require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.2 // indirect
+	github.com/danieljoos/wincred v1.2.3 // indirect
 	github.com/dustin/go-humanize v1.1.0 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
+	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/invopop/jsonschema v0.14.0 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
