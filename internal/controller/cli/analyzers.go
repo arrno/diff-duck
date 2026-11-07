@@ -18,6 +18,7 @@ func buildAnalyzers(ctx context.Context) ([]ports.SourceAnalyzer, func(), error)
 	analyzers := []ports.SourceAnalyzer{
 		goanalysis.New(),
 		treesitter.NewPython(rt),
+		treesitter.NewJavaScript(rt),
 	}
 	return analyzers, func() { _ = rt.Close(context.Background()) }, nil
 }
