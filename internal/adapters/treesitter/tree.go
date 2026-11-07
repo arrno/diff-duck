@@ -35,9 +35,11 @@ type record struct {
 	flags              uint8
 }
 
-// Tree is a parsed file. It holds a copy of every node, so it outlives the WASM instance.
+// Tree is a parsed file. It holds a copy of every node, so it outlives the WASM instance, and
+// one copy of the file's text, which every node's text is a slice of. Units keep slices of it
+// too, so however deeply declarations nest, the file is held in memory once.
 type Tree struct {
-	src   []byte
+	text  string
 	nodes []record
 }
 
@@ -48,7 +50,7 @@ func decode(raw []byte, count uint64, src []byte, symbols, fields []string) (*Tr
 		return nil, errors.New("malformed parse result")
 	}
 	le := binary.LittleEndian
-	t := &Tree{src: src, nodes: make([]record, count)}
+	t := &Tree{text: string(src), nodes: make([]record, count)}
 	last := make([]int32, count) // last child seen, per node
 	for i := range t.nodes {
 		b := raw[i*recordSize : (i+1)*recordSize]
@@ -98,6 +100,20 @@ func decode(raw []byte, count uint64, src []byte, symbols, fields []string) (*Tr
 
 // Root returns the tree's root node.
 func (t *Tree) Root() Node { return Node{t: t, i: 0} }
+
+// Text returns the whole file's text.
+func (t *Tree) Text() string { return t.text }
+
+// Any reports whether some node in the tree satisfies match. Nodes are visited in pre-order
+// without recursion, so the walk's depth does not depend on how deeply the source nests.
+func (t *Tree) Any(match func(Node) bool) bool {
+	for i := range t.nodes {
+		if match(Node{t: t, i: int32(i)}) {
+			return true
+		}
+	}
+	return false
+}
 
 // Node is one syntax node. The zero Node is null: it is what a missing child returns.
 type Node struct {
@@ -193,13 +209,41 @@ func (n Node) ChildrenByField(name string) []Node {
 	return out
 }
 
-// Text returns the node's source text.
+// Text returns the node's source text: a slice of the file's one copy, never a new copy.
 func (n Node) Text() string {
 	if n.IsNull() {
 		return ""
 	}
 	r := n.rec()
-	return string(n.t.src[r.startByte:r.endByte])
+	return n.t.text[r.startByte:r.endByte]
+}
+
+// TextUntil returns the source from the node's start up to the byte offset end, such as up to
+// a body's start or to a later node's end. Like Text, it slices the file's one copy. It is
+// empty when end lies before the node's start or past the end of the file.
+func (n Node) TextUntil(end int) string {
+	if n.IsNull() {
+		return ""
+	}
+	start := int(n.rec().startByte)
+	if end < start || end > len(n.t.text) {
+		return ""
+	}
+	return n.t.text[start:end]
+}
+
+// NextSibling returns the next sibling that is not an extra, such as a comment, or a null node.
+// It costs constant time apart from the extras it skips.
+func (n Node) NextSibling() Node {
+	if n.IsNull() {
+		return Node{}
+	}
+	for i := n.rec().next; i != -1; i = n.t.nodes[i].next {
+		if n.t.nodes[i].flags&flagExtra == 0 {
+			return Node{t: n.t, i: i}
+		}
+	}
+	return Node{}
 }
 
 // StartByte returns the node's first byte offset.

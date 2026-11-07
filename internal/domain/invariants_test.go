@@ -105,3 +105,9 @@ func TestRequalifyRenamesOnlyNamesInsideTheScope(t *testing.T) {
 		t.Error("qualified names join with a dot")
 	}
 }
+
+func TestModuleSignatureNamesTheFileByItsPath(t *testing.T) {
+	if got := ModuleSignature("web/shop/cart.ts"); got != "module web/shop/cart.ts" {
+		t.Errorf("ModuleSignature = %q", got)
+	}
+}

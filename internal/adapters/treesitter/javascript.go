@@ -97,45 +97,35 @@ func (a *JavaScript) Analyze(ctx context.Context, p string, src []byte) (domain.
 }
 
 func jsAnalyze(ctx context.Context, rt *Runtime, g Grammar, p string, src []byte) (domain.FileAnalysis, error) {
-	tree, err := rt.Parse(ctx, g, src)
+	tree, err := parseClean(ctx, rt, g, p, src)
 	if err != nil {
-		return domain.FileAnalysis{}, fmt.Errorf("parse %s: %w", p, err)
+		return domain.FileAnalysis{}, err
 	}
+	return extractJS(ctx, tree, p)
+}
+
+// extractJS extracts the units of a cleanly parsed JavaScript or TypeScript file.
+func extractJS(ctx context.Context, tree *Tree, p string) (domain.FileAnalysis, error) {
 	root := tree.Root()
-	if root.HasError() {
-		return domain.FileAnalysis{}, fmt.Errorf("parse %s: %w near line %d", p, ErrSyntax, root.FirstError().StartLine())
-	}
-	dir := path.Dir(p)
-	pkgName := path.Base(dir)
-	if dir == "." {
-		pkgName = ""
-	}
 	base := path.Base(p)
 	module := strings.TrimSuffix(base, path.Ext(base))
-	e := &jsExtractor{
-		src:  src,
-		path: p,
-		pkg:  domain.PackageRef{Dir: dir, Name: pkgName},
-		test: isJSTest(p),
-	}
+	e := &jsExtractor{fileUnits{ctx: ctx, path: p, pkg: dirPackage(p), test: isJSTest(p)}}
 	owned := map[Node]bool{}
 	slot := e.reserve()
 	e.statements(root, jsScope{prefix: module, parent: module}, owned)
+	if e.stopped() { // the module's hash covers the whole file
+		return e.analysis(domain.FileAnalysis{})
+	}
 	e.units[slot] = e.finish(domain.Unit{
 		Kind:      domain.KindModule,
 		Name:      module,
-		Signature: "module " + p,
+		Signature: domain.ModuleSignature(p),
 		Hash:      jsHash(owned).hash(root),
 		StartLine: 1,
-		EndLine:   lineCount(src),
-		Source:    string(src),
+		EndLine:   lineCount(tree.Text()),
+		Source:    tree.Text(),
 	})
-	return domain.FileAnalysis{
-		Package:   e.pkg,
-		Units:     e.units,
-		Generated: isJSGenerated(root),
-		Test:      e.test,
-	}, nil
+	return e.analysis(domain.FileAnalysis{Package: e.pkg, Generated: isJSGenerated(root)})
 }
 
 // jsScope is where a declaration sits: prefix qualifies its name, and parent is the enclosing
@@ -144,32 +134,12 @@ type jsScope struct{ prefix, parent string }
 
 func (s jsScope) name(n string) string { return domain.QualifiedName(s.prefix, n) }
 
-type jsExtractor struct {
-	src   []byte
-	path  string
-	pkg   domain.PackageRef
-	test  bool
-	units []domain.Unit
-}
-
-// reserve holds a place for a unit whose hash depends on its members, which come first.
-func (e *jsExtractor) reserve() int {
-	e.units = append(e.units, domain.Unit{})
-	return len(e.units) - 1
-}
-
-func (e *jsExtractor) finish(u domain.Unit) domain.Unit {
-	u.Package = e.pkg
-	u.File = e.path
-	u.Test = e.test
-	u.Signature = jsCompact(u.Signature)
-	return u
-}
+type jsExtractor struct{ fileUnits }
 
 // spanned completes a unit that runs from the start of one node to the end of another.
 func (e *jsExtractor) spanned(u domain.Unit, from, to Node) domain.Unit {
 	u.StartLine, u.EndLine = from.StartLine(), to.EndLine()
-	u.Source = spanText(e.src, from, to)
+	u.Source = from.TextUntil(to.EndByte())
 	return e.finish(u)
 }
 
@@ -181,12 +151,9 @@ func (e *jsExtractor) add(u domain.Unit, from, to Node) {
 // "export async function f(a: T): R", or all of it when it has no body.
 func (e *jsExtractor) header(from, body, whole Node) string {
 	if body.IsNull() {
-		return spanText(e.src, from, whole)
+		return from.TextUntil(whole.EndByte())
 	}
-	if s, end := from.StartByte(), body.StartByte(); s <= end && end <= len(e.src) {
-		return string(e.src[s:end])
-	}
-	return ""
+	return from.TextUntil(body.StartByte())
 }
 
 // statements extracts the units a program, namespace, or block declares. Statements that became
@@ -194,6 +161,9 @@ func (e *jsExtractor) header(from, body, whole Node) string {
 func (e *jsExtractor) statements(block Node, sc jsScope, owned map[Node]bool) {
 	doc := ""
 	for _, s := range block.Children() {
+		if e.stopped() {
+			return
+		}
 		if s.IsExtra() {
 			doc = jsDocComment(s)
 			continue
@@ -340,6 +310,9 @@ func (e *jsExtractor) classBody(body Node, sc jsScope, members map[Node]bool) {
 	var decorators []Node
 	doc := ""
 	for _, c := range body.Children() {
+		if e.stopped() {
+			break
+		}
 		if c.IsExtra() {
 			if len(decorators) == 0 {
 				doc = jsDocComment(c)
@@ -387,7 +360,7 @@ func (e *jsExtractor) field(f, nameNode Node, decorators []Node, doc string, sc 
 		Kind:      domain.KindField,
 		Name:      sc.name(jsName(nameNode)),
 		Parent:    sc.parent,
-		Signature: spanText(e.src, from, f),
+		Signature: from.TextUntil(f.EndByte()),
 		Hash:      jsHash(nil).hash(append(decorators, f)...),
 		Doc:       doc,
 	}
@@ -418,6 +391,9 @@ func (e *jsExtractor) iface(outer, s Node, doc string, sc jsScope) {
 	body := s.ChildByField("body")
 	memberDoc := ""
 	for _, c := range body.Children() {
+		if e.stopped() {
+			break
+		}
 		if c.IsExtra() {
 			memberDoc = jsDocComment(c)
 			continue
@@ -464,6 +440,9 @@ func (e *jsExtractor) enum(outer, s Node, doc string, sc jsScope) {
 	previous := ""
 	body := s.ChildByField("body")
 	for _, c := range body.NamedChildren() {
+		if e.stopped() {
+			break
+		}
 		nameNode := c
 		if c.Type() == "enum_assignment" {
 			nameNode = c.ChildByField("name")
@@ -557,7 +536,7 @@ func (e *jsExtractor) variables(outer, s Node, doc string, sc jsScope, owned map
 func (e *jsExtractor) bindings(span, decl Node, names []string, sigPrefix, doc, statement string, sc jsScope) {
 	code := hashStrings(statement, jsHash(nil).hash(decl))
 	source := span.Text()
-	signature := jsCompact(sigPrefix + source)
+	signature := compact(sigPrefix + source)
 	for _, n := range names {
 		e.units = append(e.units, e.finish(domain.Unit{
 			Kind:      domain.KindVar,
@@ -603,21 +582,6 @@ func jsPatternNames(n Node) []string {
 // jsMaxPrefix bounds the statement text, such as "export declare const ", that begins each of
 // several declarators' signatures. Real prefixes are far shorter.
 const jsMaxPrefix = 64
-
-// jsCompact is compact without the work when s is already one bounded line, as signatures
-// built from compacted parts usually are.
-func jsCompact(s string) string {
-	if len(s) > maxSignature || s == "" || s[0] == ' ' || s[len(s)-1] == ' ' {
-		return compact(s)
-	}
-	for i := 0; i < len(s); i++ {
-		switch c := s[i]; {
-		case c == ' ' && s[i+1] == ' ', c == '\t', c == '\n', c == '\r', c == '\v', c == '\f', c >= 0x80:
-			return compact(s)
-		}
-	}
-	return s
-}
 
 func jsIsFunction(n Node) bool {
 	switch n.Type() {
@@ -738,18 +702,4 @@ func isJSTest(p string) bool {
 
 // isJSGenerated reports whether the comments before the first statement declare the file
 // generated, as "// @generated" or "Code generated ... DO NOT EDIT." do.
-func isJSGenerated(root Node) bool {
-	var header strings.Builder
-	for _, c := range root.Children() {
-		if c.Type() == "hash_bang_line" {
-			continue
-		}
-		if !c.IsExtra() {
-			break
-		}
-		header.WriteString(c.Text() + "\n")
-	}
-	lower := strings.ToLower(header.String())
-	return strings.Contains(lower, "@generated") ||
-		(strings.Contains(lower, "generated") && strings.Contains(lower, "do not edit"))
-}
+func isJSGenerated(root Node) bool { return markedGenerated(leadingComments(root)) }

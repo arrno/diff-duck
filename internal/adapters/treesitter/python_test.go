@@ -176,7 +176,7 @@ func TestPythonSignaturesDocsAndSource(t *testing.T) {
 		"util.Outer.fetch": "async def fetch(self, url) -> bytes",
 		"util.MAX":         "MAX = 10",
 		"util.Outer.limit": "limit: int = 3",
-		"util":             "module util",
+		"util":             "module util.py",
 	} {
 		if got[name].Signature != sig {
 			t.Errorf("%s signature %q, want %q", name, got[name].Signature, sig)
@@ -196,7 +196,7 @@ func TestPythonSignaturesDocsAndSource(t *testing.T) {
 func TestPythonPackageAndModuleNaming(t *testing.T) {
 	rt := newTestRuntime(t)
 	root := analyzePy(t, rt, "setup.py", "x = 1\n")
-	if root.Package != (domain.PackageRef{Dir: ".", Name: ""}) || root.Units[0].Signature != "module setup" {
+	if root.Package != (domain.PackageRef{Dir: ".", Name: ""}) || root.Units[0].Signature != "module setup.py" {
 		t.Errorf("root module: %+v %q", root.Package, root.Units[0].Signature)
 	}
 	init := analyzePy(t, rt, "pkg/__init__.py", "")

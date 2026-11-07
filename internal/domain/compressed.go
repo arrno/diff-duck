@@ -39,6 +39,8 @@ const (
 	//   - A file has at most one MODULE unit, and it spans the whole file.
 	//   - Every other unit in the file is named QualifiedName(module, rest), and its Parent
 	//     chain ends at the module.
+	//   - Its Signature is ModuleSignature(file): "module " and the file's repository path,
+	//     such as "module web/shop/cart.ts", in every language.
 	KindModule     UnitKind = "MODULE"
 	KindClass      UnitKind = "CLASS"
 	KindEnum       UnitKind = "ENUM"

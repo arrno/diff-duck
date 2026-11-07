@@ -3,7 +3,6 @@ package treesitter
 import (
 	"context"
 	_ "embed"
-	"fmt"
 	"path"
 	"strconv"
 	"strings"
@@ -80,60 +79,51 @@ func (*Rust) Supports(p string) bool { return strings.HasSuffix(p, ".rs") }
 
 // Analyze parses one Rust file into units.
 func (a *Rust) Analyze(ctx context.Context, p string, src []byte) (domain.FileAnalysis, error) {
-	tree, err := a.rt.Parse(ctx, rustGrammar, src)
+	tree, err := parseClean(ctx, a.rt, rustGrammar, p, src)
 	if err != nil {
-		return domain.FileAnalysis{}, fmt.Errorf("parse %s: %w", p, err)
+		return domain.FileAnalysis{}, err
 	}
+	return extractRust(ctx, tree, p)
+}
+
+// extractRust extracts the units of a cleanly parsed Rust file.
+func extractRust(ctx context.Context, tree *Tree, p string) (domain.FileAnalysis, error) {
 	root := tree.Root()
-	if root.HasError() {
-		return domain.FileAnalysis{}, fmt.Errorf("parse %s: %w near line %d", p, ErrSyntax, root.FirstError().StartLine())
-	}
-	dir := path.Dir(p)
-	pkgName := path.Base(dir)
-	if dir == "." {
-		pkgName = ""
-	}
 	module := strings.TrimSuffix(path.Base(p), ".rs")
 	constraints, constraintNodes := rsConstraints(root)
-	e := &rsExtractor{
-		src:  src,
+	e := &rsExtractor{fileUnits{
+		ctx:  ctx,
 		path: p,
-		pkg:  domain.PackageRef{Dir: dir, Name: pkgName},
+		pkg:  dirPackage(p),
 		test: rsIsTestPath(p) || rsHasCfgTest(constraintNodes),
-	}
+	}}
 	owned := map[Node]bool{}
 	for _, c := range constraintNodes {
 		owned[c] = true
 	}
 	slot := e.reserve()
 	e.items(root, rsScope{name: module, parent: module, test: e.test}, owned)
+	if e.stopped() { // the module's hash covers the whole file
+		return e.analysis(domain.FileAnalysis{})
+	}
 	e.units[slot] = e.finish(domain.Unit{
 		Kind:      domain.KindModule,
 		Name:      module,
-		Signature: "module " + p,
+		Signature: domain.ModuleSignature(p),
 		Hash:      hashStrings(rsHash(owned).hash(root), rsDocCode(rsInnerDocs(root))),
 		Doc:       rsDoc(rsInnerDocs(root)),
 		StartLine: 1,
-		EndLine:   lineCount(src),
-		Source:    string(src),
-		Test:      e.test,
+		EndLine:   lineCount(tree.Text()),
+		Source:    tree.Text(),
 	})
-	return domain.FileAnalysis{
+	return e.analysis(domain.FileAnalysis{
 		Package:     e.pkg,
-		Units:       e.units,
 		Generated:   rsIsGenerated(root),
-		Test:        e.test,
 		Constraints: constraints,
-	}, nil
+	})
 }
 
-type rsExtractor struct {
-	src   []byte
-	path  string
-	pkg   domain.PackageRef
-	test  bool
-	units []domain.Unit
-}
+type rsExtractor struct{ fileUnits }
 
 // rsScope is where items are declared. name qualifies their names; parent is the unit they sit
 // under, which differs from name inside a flattened inline module.
@@ -160,18 +150,6 @@ func (it rsItem) test() bool {
 	return false
 }
 
-func (e *rsExtractor) reserve() int {
-	e.units = append(e.units, domain.Unit{})
-	return len(e.units) - 1
-}
-
-func (e *rsExtractor) finish(u domain.Unit) domain.Unit {
-	u.Package = e.pkg
-	u.File = e.path
-	u.Signature = compact(u.Signature)
-	return u
-}
-
 // hash fingerprints an item with its attributes, leaving out owned members. The code blocks
 // in its doc comments count too: cargo test compiles and runs them as doctests.
 func (it rsItem) hash(owned map[Node]bool, nodes ...Node) string {
@@ -185,7 +163,7 @@ func (it rsItem) hash(owned map[Node]bool, nodes ...Node) string {
 // place sets a unit's range and code to the item with its attributes and doc comments.
 func (e *rsExtractor) place(u domain.Unit, it rsItem) domain.Unit {
 	u.StartLine, u.EndLine = it.first.StartLine(), it.node.EndLine()
-	u.Source = spanText(e.src, it.first, it.node)
+	u.Source = it.first.TextUntil(it.node.EndByte())
 	if u.Doc == "" {
 		u.Doc = rsDoc(it.docs)
 	}
@@ -239,6 +217,9 @@ func (e *rsExtractor) items(container Node, scope rsScope, owned map[Node]bool) 
 		}
 	}
 	for _, it := range list {
+		if e.stopped() {
+			return
+		}
 		n := it.node
 		name := n.ChildByField("name")
 		test := scope.test || it.test()
@@ -307,7 +288,7 @@ func (e *rsExtractor) function(it rsItem, scope, parent string, kind domain.Unit
 		Kind:      kind,
 		Name:      domain.QualifiedName(scope, nameNode.Text()+"()"),
 		Parent:    parent,
-		Signature: rsAttrText(it) + rsHeader(e.src, n, body),
+		Signature: rsAttrText(it) + rsHeader(n, body),
 		Hash:      it.hash(nil),
 		Test:      test,
 	}
@@ -355,6 +336,9 @@ func (e *rsExtractor) structure(it rsItem, scope rsScope, test bool) {
 	switch body.Type() {
 	case "field_declaration_list":
 		for _, f := range rsLeading(body) {
+			if e.stopped() {
+				break
+			}
 			fname := f.node.ChildByField("name")
 			if f.node.Type() != "field_declaration" || fname.IsNull() {
 				continue
@@ -368,7 +352,7 @@ func (e *rsExtractor) structure(it rsItem, scope rsScope, test bool) {
 	case "ordered_field_declaration_list":
 		e.tupleFields(body, name, test, members)
 	}
-	header := rsHeader(e.src, n, body)
+	header := rsHeader(n, body)
 	if body.Type() != "field_declaration_list" {
 		header = strings.TrimSuffix(n.Text(), ";")
 	}
@@ -387,7 +371,7 @@ func (e *rsExtractor) field(it rsItem, parent, short string, nodes []Node, test 
 		Kind:      domain.KindField,
 		Name:      domain.QualifiedName(parent, short),
 		Parent:    parent,
-		Signature: rsAttrText(it) + spanText(e.src, nodes[0], last),
+		Signature: rsAttrText(it) + nodes[0].TextUntil(last.EndByte()),
 		Hash:      it.hash(nil, nodes...),
 		Test:      test,
 	}
@@ -402,6 +386,9 @@ func (e *rsExtractor) tupleFields(body Node, parent string, test bool, members m
 	var attrs, docs, lead []Node
 	var first Node
 	for _, c := range body.Children() {
+		if e.stopped() {
+			break
+		}
 		switch {
 		case c.IsExtra():
 			if rsIsOuterDoc(c) {
@@ -448,6 +435,9 @@ func (e *rsExtractor) enum(it rsItem, scope rsScope, test bool) {
 	slot := e.reserve()
 	members := map[Node]bool{}
 	for _, v := range rsLeading(body) {
+		if e.stopped() {
+			break
+		}
 		vname := v.node.ChildByField("name")
 		if v.node.Type() != "enum_variant" || vname.IsNull() {
 			continue
@@ -469,7 +459,7 @@ func (e *rsExtractor) enum(it rsItem, scope rsScope, test bool) {
 		Kind:      domain.KindEnum,
 		Name:      name,
 		Parent:    scope.parent,
-		Signature: rsAttrText(it) + rsHeader(e.src, n, body),
+		Signature: rsAttrText(it) + rsHeader(n, body),
 		Test:      test,
 	}, members)
 }
@@ -489,7 +479,7 @@ func (e *rsExtractor) trait(it rsItem, scope rsScope, test bool) {
 		Kind:      domain.KindTrait,
 		Name:      name,
 		Parent:    scope.parent,
-		Signature: rsAttrText(it) + rsHeader(e.src, n, body),
+		Signature: rsAttrText(it) + rsHeader(n, body),
 		Test:      test,
 	}, members)
 }
@@ -520,6 +510,9 @@ func (e *rsExtractor) impl(it rsItem, scope rsScope, local map[string]bool, test
 // without a body: a trait's required method.
 func (e *rsExtractor) associated(body Node, scope, parent string, test bool, owned map[Node]bool, signatureKind domain.UnitKind) {
 	for _, it := range rsLeading(body) {
+		if e.stopped() {
+			break
+		}
 		t := test || it.test()
 		switch it.node.Type() {
 		case "function_item":
@@ -605,15 +598,11 @@ func rsDeclaresTypeParam(params Node, name string) bool {
 
 // rsHeader returns an item's text before its body, or the whole item without a trailing
 // semicolon when it has none.
-func rsHeader(src []byte, n, body Node) string {
+func rsHeader(n, body Node) string {
 	if body.IsNull() {
 		return strings.TrimSuffix(strings.TrimSpace(n.Text()), ";")
 	}
-	s, b := n.StartByte(), body.StartByte()
-	if s < 0 || b > len(src) || s > b {
-		return ""
-	}
-	return strings.TrimSpace(string(src[s:b]))
+	return strings.TrimSpace(n.TextUntil(body.StartByte()))
 }
 
 // rsAttrText returns an item's attributes as signature text, such as "#[derive(Debug)] ".
@@ -664,7 +653,7 @@ func rsIgnoredComma(n Node) bool {
 		return false
 	}
 	// Only the next sibling is looked at, so a list of n items costs O(n), not O(n^2).
-	switch rsNextSibling(n).Type() {
+	switch n.NextSibling().Type() {
 	case "", ")", "]", "}", ">", "|":
 	default:
 		return false
@@ -675,16 +664,6 @@ func rsIgnoredComma(n Node) bool {
 		return len(parent.NamedChildren()) >= 2
 	}
 	return true
-}
-
-// rsNextSibling returns the next sibling that is not an extra, or a null node.
-func rsNextSibling(n Node) Node {
-	for i := n.rec().next; i != -1; i = n.t.nodes[i].next {
-		if c := (Node{t: n.t, i: i}); !c.IsExtra() {
-			return c
-		}
-	}
-	return Node{}
 }
 
 // rsIsOuterDoc reports whether a comment is an outer doc comment (/// or /** */).
@@ -817,15 +796,4 @@ func rsIsTestPath(p string) bool {
 
 // rsIsGenerated reports whether the comments before the first item declare the file generated:
 // "@generated", the marker Rust tools use, or "generated ... do not edit".
-func rsIsGenerated(root Node) bool {
-	var header strings.Builder
-	for _, c := range root.Children() {
-		if !c.IsExtra() {
-			break
-		}
-		header.WriteString(c.Text() + "\n")
-	}
-	lower := strings.ToLower(header.String())
-	return strings.Contains(lower, "@generated") ||
-		(strings.Contains(lower, "generated") && strings.Contains(lower, "do not edit"))
-}
+func rsIsGenerated(root Node) bool { return markedGenerated(leadingComments(root)) }

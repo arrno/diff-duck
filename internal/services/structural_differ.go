@@ -244,13 +244,15 @@ func pairDuplicates(plain string, before, after []*keyedUnit) {
 			u.key = key
 		}
 	}
+	// Units of different kinds that share a name, such as a field and a method, are never the
+	// same unit, whatever their content or file.
 	pair := func(match func(old, cur *keyedUnit) bool) {
 		for _, old := range before {
 			if old.key != "" {
 				continue
 			}
 			for _, cur := range after {
-				if cur.key == "" && match(old, cur) {
+				if cur.key == "" && old.Kind == cur.Kind && match(old, cur) {
 					assign(old, cur)
 					break
 				}
@@ -377,8 +379,12 @@ func (b *treeBuilder) detectRenames(changed []*keyedUnit) []*keyedUnit {
 		text := fmt.Sprintf("Renamed from %s with an identical body.", old.Name)
 		if old.Package != cur.Package {
 			n.Moved = true
-			n.PreviousName = old.Package.Dir + "." + old.Name
-			text = fmt.Sprintf("Moved from package %s with an identical body.", old.Package.Dir)
+			if from := movedFrom(old.Package, cur.Package); from != "" {
+				n.PreviousName = from + "." + old.Name
+				text = fmt.Sprintf("Moved from package %s with an identical body.", from)
+			} else {
+				text = "Moved from the unnamed package with an identical body."
+			}
 			if old.Name != cur.Name {
 				text = fmt.Sprintf("Moved and renamed from %s with an identical body.", n.PreviousName)
 			}
@@ -398,6 +404,17 @@ func (b *treeBuilder) detectRenames(changed []*keyedUnit) []*keyedUnit {
 		}
 	}
 	return kept
+}
+
+// movedFrom names the package a unit left: its directory, or, when the unit stayed in the same
+// directory and only its declared package changed (a C# namespace, say), that package's name.
+// It is empty when that package has no name, such as C#'s global namespace or Java's default
+// package at the repository root.
+func movedFrom(old, cur domain.PackageRef) string {
+	if old.Dir == cur.Dir {
+		return old.Name
+	}
+	return old.Dir
 }
 
 // absorb makes a surviving node the owner of a unit that turned out to be its earlier identity.

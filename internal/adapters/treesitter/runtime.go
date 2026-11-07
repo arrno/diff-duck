@@ -11,8 +11,10 @@
 //  1. scripts/treesitter/<lang>.env pins the grammar's Go module, version, source directory,
 //     and entry symbol.
 //  2. `make treesitter-wasm GRAMMAR=<lang>` builds wasm/<lang>.wasm and its licence text.
-//  3. <lang>.go embeds the module as a Grammar and implements ports.SourceAnalyzer, using Tree,
-//     Node, and fingerprint; <lang>_test.go covers it.
+//  3. <lang>.go embeds the module as a Grammar and implements ports.SourceAnalyzer: parseClean,
+//     then a walk that collects units in a fileUnits (which checks for cancellation and stamps
+//     each unit), using Tree, Node, and fingerprint; <lang>_test.go covers it, and the
+//     language joins the table in extract_test.go.
 //  4. The controller registers the analyzer.
 package treesitter
 
