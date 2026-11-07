@@ -231,3 +231,8 @@ provider with no key saved and none given is a 400.
   OpenAI Go SDK alone is about 30 MB. Whether to replace it is pending a user decision.
 - **Integration fixes step:** in progress (shared text slices, scaffolding consolidation, MODULE
   signature, ctx in extraction, kind-safe pairing, rename message, flaky Codex test).
+- **OpenAI client done** (merged; user chose option 1). openai-go is replaced by a net/http
+  Responses API client: retries 429/5xx up to 3 attempts honoring Retry-After, never retries a
+  2xx with a broken body (no double billing), follows no redirects, bounds every body. Binary
+  71.9 -> 41.9 MB. Behavior change: `OPENAI_BASE_URL`, `OPENAI_ORG_ID` and `OPENAI_PROJECT_ID`
+  are no longer read from the environment.
