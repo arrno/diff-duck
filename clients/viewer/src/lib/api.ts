@@ -1,5 +1,5 @@
 // The local server's API. Every failure carries a message written for the person using the app.
-import type { CompressedDiff } from "./model";
+import type { CompressedDiff, ProviderId, ReadingLevelId } from "./model";
 
 export type DiffStatus = "running" | "done" | "failed";
 
@@ -29,7 +29,26 @@ export interface Commit {
   date: string;
 }
 
+export interface ProviderStatus {
+  id: ProviderId;
+  label: string;
+  available: boolean;
+  needsKey: boolean;
+  keySaved: boolean;
+}
+
+/** The app-wide model settings. The server never returns a key, only whether one is saved. */
+export interface Settings {
+  provider: ProviderId;
+  readingLevel: ReadingLevelId;
+  /** The adapter the server was started with, which overrides the provider; empty if none. */
+  pinned: string;
+  providers: ProviderStatus[];
+}
+
 export class NotFoundError extends Error {}
+/** The server refused the request as it was sent; the message says how to fix it. */
+export class BadRequestError extends Error {}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
@@ -43,7 +62,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const body = await response.json().catch(() => null);
   if (response.ok) return body as T;
   const message = body?.error ?? "Something went wrong.";
-  throw response.status === 404 ? new NotFoundError(message) : new Error(message);
+  if (response.status === 404) throw new NotFoundError(message);
+  if (response.status === 400) throw new BadRequestError(message);
+  throw new Error(message);
 }
 
 export const listDiffs = () => request<SavedDiff[]>("/api/diffs");
@@ -57,3 +78,14 @@ export const createDiff = (repository: string, base: string, head: string) =>
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ repository, base, head }),
   });
+
+export const getSettings = () => request<Settings>("/api/settings");
+/** Saves the settings. An empty apiKey keeps the saved key, so it is left out of the request. */
+export const saveSettings = (provider: ProviderId, readingLevel: ReadingLevelId, apiKey: string) =>
+  request<Settings>("/api/settings", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(apiKey ? { provider, readingLevel, apiKey } : { provider, readingLevel }),
+  });
+export const clearKey = (provider: ProviderId) =>
+  request<Settings>(`/api/settings/keys/${encodeURIComponent(provider)}`, { method: "DELETE" });

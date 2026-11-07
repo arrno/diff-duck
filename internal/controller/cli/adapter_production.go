@@ -5,6 +5,7 @@ package cli
 import (
 	"fmt"
 
+	"github.com/arrno/diff-duck/internal/adapters/keyring"
 	"github.com/arrno/diff-duck/internal/services/ports"
 )
 
@@ -12,3 +13,6 @@ import (
 func verificationModel(adapter string) (ports.LanguageModel, error) {
 	return nil, fmt.Errorf("unknown adapter %q: use claude-cli or anthropic-api", adapter)
 }
+
+// secretStore is the OS keychain.
+func secretStore() ports.SecretStore { return keyring.New() }

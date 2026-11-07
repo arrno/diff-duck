@@ -69,25 +69,106 @@ test("short and long pages reserve the same scrollbar space", async ({ page }) =
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).scrollbarGutter)).toBe("stable");
 });
 
-test("the person menu opens, and keeps nothing yet", async ({ page }) => {
-  const requests: string[] = [];
-  page.on("request", (r) => { if (r.method() !== "GET") requests.push(r.url()); });
+for (const theme of ["light", "dark"] as const) {
+  test(`model settings opened in the ${theme} theme pass an accessibility check`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: theme });
+    await page.goto(app);
+    await page.getByRole("button", { name: "Model settings" }).click();
+    await expect(page.getByRole("dialog", { name: "Model settings" }).getByLabel("Reading level")).toBeVisible();
+    await noViolations(page);
+  });
+}
+
+test("a server started with --adapter pins the provider, and the reading level persists", async ({ page }) => {
+  const sent: string[] = [];
+  page.on("request", (r) => { if (r.method() === "PUT") sent.push(r.postData() ?? ""); });
+  await page.goto(app);
+  const trigger = page.getByRole("button", { name: "Model settings" });
+  await trigger.click();
+  const menu = page.getByRole("dialog", { name: "Model settings" });
+  const provider = menu.getByLabel("Provider");
+  await expect(provider).toBeDisabled();
+  await expect(menu.getByTestId("provider-pinned")).toContainText("--adapter scripted:normal");
+  await expect(provider).toHaveAccessibleDescription(/--adapter scripted:normal/);
+  await expect(provider.locator("option")).toHaveCount(4);
+  await expect(provider.locator("option").first()).toContainText("Claude Code");
+  const level = menu.getByLabel("Reading level");
+  await expect(level).toHaveAttribute("aria-valuetext", "6th grade");
+
+  // Keyboard only: into the slider, two steps up, then Save.
+  await level.focus();
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowRight");
+  await expect(level).toHaveAttribute("aria-valuetext", "College");
+  await menu.getByRole("button", { name: "Save" }).focus();
+  await page.keyboard.press("Enter");
+  await expect(menu).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+  expect(sent).toEqual([JSON.stringify({ provider: "claude-code", readingLevel: "college" })]);
+
+  await page.reload();
+  await page.getByRole("button", { name: "Model settings" }).click();
+  await expect(menu.getByLabel("Reading level")).toHaveAttribute("aria-valuetext", "College");
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+});
+
+test("an API provider takes a key that is never kept in the page", async ({ page }) => {
+  // The pinned server cannot reach this flow without the real keychain, so the API is stubbed.
+  const key = "sk-test-not-a-real-key";
+  const providers = (keySaved: boolean) => [
+    { id: "claude-code", label: "Claude Code", available: true, needsKey: false, keySaved: false },
+    { id: "codex", label: "Codex", available: false, needsKey: false, keySaved: false },
+    { id: "anthropic-api", label: "Anthropic API", available: true, needsKey: true, keySaved },
+    { id: "openai-api", label: "OpenAI API", available: true, needsKey: true, keySaved: false },
+  ];
+  const settings = (keySaved: boolean) => ({ provider: "anthropic-api", readingLevel: "6th-grade", pinned: "", providers: providers(keySaved) });
+  const calls: string[] = [];
+  await page.route((url) => url.pathname.startsWith("/api/settings"), async (route) => {
+    const r = route.request();
+    calls.push(`${r.method()} ${new URL(r.url()).pathname} ${r.postData() ?? ""}`.trim());
+    if (r.method() === "GET") return route.fulfill({ json: settings(true) });
+    if (r.method() === "DELETE") return route.fulfill({ json: settings(false) });
+    return route.fulfill({ status: 400, json: { error: "invalid settings: the API key may hold only printable ASCII without spaces" } });
+  });
   await page.goto(app);
   await page.getByRole("button", { name: "Model settings" }).click();
   const menu = page.getByRole("dialog", { name: "Model settings" });
-  await expect(menu.getByLabel("Provider")).toHaveValue("Anthropic");
-  await menu.getByLabel("Provider").selectOption("OpenAI");
-  await menu.getByLabel("API key").fill("not-a-real-key");
+  const provider = menu.getByLabel("Provider");
+  await expect(provider).toBeEnabled();
+  await expect(provider).toHaveValue("anthropic-api");
+  await expect(provider.locator("option", { hasText: "Codex" })).toHaveText("Codex (not installed)");
+  await expect(provider.locator("option", { hasText: "Codex" })).toBeDisabled();
+  await expect(menu.getByText("Key saved")).toBeVisible();
+  const keyField = menu.getByLabel("API key");
+  await expect(keyField).toHaveAttribute("placeholder", "Leave blank to keep the saved key");
+  await expect(keyField).toHaveAttribute("type", "password");
   await noViolations(page);
+
+  await menu.getByRole("button", { name: "Clear key" }).click();
+  await expect(menu.getByText("Key saved")).toHaveCount(0);
+  await expect(menu.getByRole("button", { name: "Clear key" })).toHaveCount(0);
+  await expect(keyField).toBeFocused();
+  await expect(keyField).not.toHaveAttribute("placeholder", /.+/);
+
+  await keyField.fill(key);
   await menu.getByRole("button", { name: "Save" }).click();
-  await expect(menu).toHaveCount(0);
-  expect(requests).toEqual([]);
-  const stored = await page.evaluate(() => JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage }));
-  expect(stored).not.toContain("not-a-real-key");
-  await page.getByRole("button", { name: "Model settings" }).click();
-  await expect(menu.getByLabel("API key")).toHaveValue("");
+  await expect(menu.getByRole("alert")).toHaveText(/printable ASCII/);
+  await expect(menu).toBeVisible();
+  await expect(keyField).toHaveValue("");
+  expect(calls).toEqual([
+    "GET /api/settings",
+    "DELETE /api/settings/keys/anthropic-api",
+    `PUT /api/settings ${JSON.stringify({ provider: "anthropic-api", readingLevel: "6th-grade", apiKey: key })}`,
+  ]);
+
+  // A CLI provider has no key field.
+  await provider.selectOption("claude-code");
+  await expect(menu.getByLabel("API key")).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(menu).toHaveCount(0);
+  const stored = await page.evaluate(() => JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage }) + document.body.innerHTML);
+  expect(stored).not.toContain(key);
 });
 
 test("a path that is not a repo says so", async ({ page }) => {
