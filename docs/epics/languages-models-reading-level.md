@@ -269,3 +269,12 @@ Four independent reviewers. Architecture found no violations. Consolidated findi
 
 Open question: B5 "key survives restart" is proven only by the opt-in `keychain`-tag test against
 the real OS keychain; `make verify` uses the mock. Recorded as a known limitation.
+- **F2 done** (merged): unpinned e2e (`TestB3UnpinnedAppRunsTheSavedProvider`); popover save and
+  footer Playwright tests; `pinnedProvider` in SettingsView shown in the disabled picker; Codex
+  unavailable on non-Unix; `NewWithKey` ignores env gateway and headers; `reset` keeps settings
+  (`sqlitestore.ClearDiffs`, restarts the app on failure); viewer fixture covers CLASS and
+  ENUM_MEMBER; the ModelOpener doc explains run-time re-checks.
+- **Known limitations (accepted):** on Windows the picker says Codex is "(not installed)" when the
+  real reason is the platform; with a pin to the same API provider as the saved one, the key field
+  saves to the keychain while pinned runs use the env key; the non-Unix Codex test is compile-only
+  (no Windows CI).
