@@ -159,6 +159,9 @@ type Generation struct {
 	OutputTokens  int64         `json:"outputTokens"`
 	CostUSD       float64       `json:"costUsd"`
 	Duration      time.Duration `json:"durationNs"`
+	// Provider and ReadingLevel are empty for diffs saved before they were recorded.
+	Provider     ModelProvider `json:"provider,omitempty"`
+	ReadingLevel ReadingLevel  `json:"readingLevel,omitempty"`
 }
 
 // Metrics are the measures used to compare runs and prompt variants.
