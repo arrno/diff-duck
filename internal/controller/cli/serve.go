@@ -125,9 +125,11 @@ func serve(ctx context.Context, opts serveOptions, stdout io.Writer) error {
 		Concurrency:   opts.concurrency,
 		MaxModelCalls: opts.maxModelCalls,
 	})
+	// One keychain for the whole process: S5 shares it as the KeySource for model building.
+	keys := secretStore()
 	settings := services.NewSettingsKeeper(services.SettingsDeps{
 		Store:        store,
-		Secrets:      secretStore(),
+		Secrets:      keys,
 		Availability: newPathAvailability(),
 		Pinned:       opts.pinned,
 	})

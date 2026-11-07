@@ -173,6 +173,18 @@ func TestASubmittedKeyIsNeverWrittenBackOrLogged(t *testing.T) {
 	}
 }
 
+func TestAFailureTheUserCanFixIsStillExplainedWhenTheKeyIsHidden(t *testing.T) {
+	for _, sentinel := range []error{services.ErrInvalidSettings, services.ErrProviderUnavailable, services.ErrKeyRequired} {
+		err := fmt.Errorf("%w: key %s rejected", sentinel, testKey)
+		w := do(handlerWith(t, &fakeSettings{err: err}), "PUT", "/api/settings", saveBody(testKey), jsonType)
+		var body struct{ Error string }
+		_ = json.Unmarshal(w.Body.Bytes(), &body)
+		if want := sentinel.Error() + ": key [redacted] rejected"; w.Code != http.StatusBadRequest || body.Error != want {
+			t.Errorf("%v: got %d %q, want 400 %q", sentinel, w.Code, body.Error, want)
+		}
+	}
+}
+
 func TestMalformedSettingsRequestsNeverReachTheService(t *testing.T) {
 	for name, tc := range map[string]struct {
 		body    string

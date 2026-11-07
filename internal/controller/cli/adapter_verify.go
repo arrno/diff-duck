@@ -5,6 +5,7 @@ package cli
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/arrno/diff-duck/internal/adapters/keyring"
 	"github.com/arrno/diff-duck/internal/adapters/scriptedmodel"
@@ -21,9 +22,14 @@ func verificationModel(adapter string) (ports.LanguageModel, error) {
 	return scriptedmodel.New(scriptedmodel.Behavior(behavior))
 }
 
+// mockKeychain installs go-keyring's in-memory mock once per process. A second MockInit would
+// wipe every key saved so far.
+var mockKeychain sync.Once
+
 // secretStore is the keychain adapter over go-keyring's in-memory mock, so verification never
-// reads or writes the real OS keychain of the machine running it.
-func secretStore() ports.SecretStore {
-	gokeyring.MockInit()
+// reads or writes the real OS keychain of the machine running it. It serves as both
+// ports.SecretStore and ports.KeySource; build it once and share it.
+func secretStore() *keyring.Keychain {
+	mockKeychain.Do(gokeyring.MockInit)
 	return keyring.New()
 }

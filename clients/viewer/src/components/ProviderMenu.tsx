@@ -37,6 +37,8 @@ export function ProviderMenu() {
     setKey("");
     setError("");
     setNotice("");
+    // A request still in flight from the last opening no longer belongs to this form.
+    setBusy(false);
     const current = ++opening.current;
     if (!next) return;
     setSettings(null);
@@ -46,19 +48,20 @@ export function ProviderMenu() {
     );
   };
 
-  // Runs a settings request, showing its failure in the form. Returns the new settings, or null.
-  const send = async (call: () => Promise<Settings>) => {
+  // Runs a settings request, showing its failure in the form. Returns the server's settings, or
+  // null if it failed or the menu was closed meanwhile.
+  const send = async (call: () => Promise<Settings>, failureHint = "") => {
     const current = opening.current;
     setBusy(true);
     setError("");
     setNotice("");
     try {
       const next = await call();
-      if (opening.current === current) show(next);
       return opening.current === current ? next : null;
     } catch (err) {
       if (opening.current === current) {
-        setError(err instanceof BadRequestError ? err.message : `Couldn't save the settings. ${(err as Error).message}`);
+        const message = err instanceof BadRequestError ? err.message : `Couldn't change the settings. ${(err as Error).message}`;
+        setError(message + failureHint);
       }
       return null;
     } finally {
@@ -71,14 +74,20 @@ export function ProviderMenu() {
     if (!settings || busy) return;
     const sent = key;
     setKey("");
-    if (await send(() => saveSettings(provider, READING_LEVELS[level].id, sent))) change(false);
+    const hint = sent ? " Enter the key again." : "";
+    if (await send(() => saveSettings(provider, READING_LEVELS[level].id, sent), hint)) change(false);
   };
 
   const forget = async () => {
     // The button disappears once the key is cleared. Moving focus first keeps it inside the
     // menu, which would otherwise close as focus fell outside it.
     keyInput.current?.focus();
-    if (await send(() => clearKey(provider))) setNotice("Key cleared.");
+    const next = await send(() => clearKey(provider));
+    if (next) {
+      // Only the key changed: unsaved provider and reading level choices stay as they are.
+      setSettings(next);
+      setNotice("Key cleared.");
+    }
   };
 
   const chosen = settings?.providers.find((p) => p.id === provider);
@@ -91,7 +100,7 @@ export function ProviderMenu() {
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Content align="end" sideOffset={8} aria-label="Model settings" className="z-[70] w-80 max-w-[calc(100vw-2rem)] rounded-lg border bg-background p-4 shadow-lg outline-none dark:border-foreground/30">
-          <form onSubmit={save} className="space-y-3" aria-busy={!settings || busy}>
+          <form onSubmit={save} autoComplete="off" className="space-y-3" aria-busy={!settings || busy}>
             <div className="space-y-1">
               <p className="text-sm font-semibold">Model settings</p>
               <p className="text-xs text-muted-foreground">These apply to the next diff you start.</p>
@@ -137,6 +146,12 @@ export function ProviderMenu() {
                       placeholder={chosen.keySaved ? "Leave blank to keep the saved key" : undefined}
                       autoComplete="off"
                       spellCheck={false}
+                      // Password managers ignore autocomplete="off" on password fields; these
+                      // ask them not to offer to store the key (K1).
+                      data-1p-ignore="true"
+                      data-lpignore="true"
+                      data-bwignore="true"
+                      data-form-type="other"
                     />
                     <p className="text-xs text-muted-foreground">Kept in your system keychain. It is never shown again.</p>
                     {chosen.keySaved && (

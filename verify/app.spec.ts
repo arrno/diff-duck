@@ -111,25 +111,37 @@ test("a server started with --adapter pins the provider, and the reading level p
   await expect(menu.getByLabel("Reading level")).toHaveAttribute("aria-valuetext", "College");
   await page.keyboard.press("Escape");
   await expect(menu).toHaveCount(0);
+  // Put the shared server back as it was, so this test can run again against it.
+  const reset = await page.request.put(`${app}api/settings`, { data: { provider: "claude-code", readingLevel: "6th-grade" } });
+  expect(reset.status()).toBe(200);
 });
 
+// The pinned server cannot reach the key flow without a keychain, so these tests stub the API.
+const stubProviders = (keySaved: boolean) => [
+  { id: "claude-code", label: "Claude Code", available: true, needsKey: false, keySaved: false },
+  { id: "codex", label: "Codex", available: false, needsKey: false, keySaved: false },
+  { id: "anthropic-api", label: "Anthropic API", available: true, needsKey: true, keySaved },
+  { id: "openai-api", label: "OpenAI API", available: true, needsKey: true, keySaved: false },
+];
+const stubSettings = (keySaved: boolean) => ({ provider: "anthropic-api", readingLevel: "6th-grade", pinned: "", providers: stubProviders(keySaved) });
+const settingsAPI = (url: URL) => url.pathname.startsWith("/api/settings");
+
 test("an API provider takes a key that is never kept in the page", async ({ page }) => {
-  // The pinned server cannot reach this flow without the real keychain, so the API is stubbed.
+  const rejected = "sk-test rejected";
   const key = "sk-test-not-a-real-key";
-  const providers = (keySaved: boolean) => [
-    { id: "claude-code", label: "Claude Code", available: true, needsKey: false, keySaved: false },
-    { id: "codex", label: "Codex", available: false, needsKey: false, keySaved: false },
-    { id: "anthropic-api", label: "Anthropic API", available: true, needsKey: true, keySaved },
-    { id: "openai-api", label: "OpenAI API", available: true, needsKey: true, keySaved: false },
-  ];
-  const settings = (keySaved: boolean) => ({ provider: "anthropic-api", readingLevel: "6th-grade", pinned: "", providers: providers(keySaved) });
+  let keySaved = true;
   const calls: string[] = [];
-  await page.route((url) => url.pathname.startsWith("/api/settings"), async (route) => {
+  await page.route(settingsAPI, async (route) => {
     const r = route.request();
     calls.push(`${r.method()} ${new URL(r.url()).pathname} ${r.postData() ?? ""}`.trim());
-    if (r.method() === "GET") return route.fulfill({ json: settings(true) });
-    if (r.method() === "DELETE") return route.fulfill({ json: settings(false) });
-    return route.fulfill({ status: 400, json: { error: "invalid settings: the API key may hold only printable ASCII without spaces" } });
+    if (r.method() === "DELETE") keySaved = false;
+    if (r.method() === "PUT") {
+      if (r.postData()?.includes(rejected)) {
+        return route.fulfill({ status: 400, json: { error: "invalid settings: the API key may hold only printable ASCII without spaces" } });
+      }
+      keySaved = true;
+    }
+    return route.fulfill({ json: stubSettings(keySaved) });
   });
   await page.goto(app);
   await page.getByRole("button", { name: "Model settings" }).click();
@@ -143,33 +155,75 @@ test("an API provider takes a key that is never kept in the page", async ({ page
   const keyField = menu.getByLabel("API key");
   await expect(keyField).toHaveAttribute("placeholder", "Leave blank to keep the saved key");
   await expect(keyField).toHaveAttribute("type", "password");
+  // Password managers are told to leave the key alone (K1).
+  await expect(keyField).toHaveAttribute("autocomplete", "off");
+  await expect(keyField).toHaveAttribute("data-1p-ignore", "true");
+  await expect(keyField).toHaveAttribute("data-lpignore", "true");
   await noViolations(page);
 
+  // Clearing the key keeps a reading level chosen but not yet saved.
+  const level = menu.getByLabel("Reading level");
+  await level.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(level).toHaveAttribute("aria-valuetext", "High school");
   await menu.getByRole("button", { name: "Clear key" }).click();
+  await expect(menu.getByRole("status")).toHaveText("Key cleared.");
   await expect(menu.getByText("Key saved")).toHaveCount(0);
   await expect(menu.getByRole("button", { name: "Clear key" })).toHaveCount(0);
   await expect(keyField).toBeFocused();
   await expect(keyField).not.toHaveAttribute("placeholder", /.+/);
+  await expect(level).toHaveAttribute("aria-valuetext", "High school");
+  await expect(provider).toHaveValue("anthropic-api");
+
+  await keyField.fill(rejected);
+  await menu.getByRole("button", { name: "Save" }).click();
+  await expect(menu.getByRole("alert")).toHaveText(/printable ASCII.*Enter the key again\./);
+  await expect(menu).toBeVisible();
+  await expect(keyField).toHaveValue("");
 
   await keyField.fill(key);
   await menu.getByRole("button", { name: "Save" }).click();
-  await expect(menu.getByRole("alert")).toHaveText(/printable ASCII/);
-  await expect(menu).toBeVisible();
-  await expect(keyField).toHaveValue("");
+  await expect(menu).toHaveCount(0);
   expect(calls).toEqual([
     "GET /api/settings",
     "DELETE /api/settings/keys/anthropic-api",
-    `PUT /api/settings ${JSON.stringify({ provider: "anthropic-api", readingLevel: "6th-grade", apiKey: key })}`,
+    `PUT /api/settings ${JSON.stringify({ provider: "anthropic-api", readingLevel: "high-school", apiKey: rejected })}`,
+    `PUT /api/settings ${JSON.stringify({ provider: "anthropic-api", readingLevel: "high-school", apiKey: key })}`,
   ]);
 
+  await page.getByRole("button", { name: "Model settings" }).click();
+  await expect(menu.getByText("Key saved")).toBeVisible();
+  await expect(menu.getByLabel("API key")).toHaveValue("");
   // A CLI provider has no key field.
   await provider.selectOption("claude-code");
   await expect(menu.getByLabel("API key")).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(menu).toHaveCount(0);
-  const stored = await page.evaluate(() => JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage }) + document.body.innerHTML);
+  const stored = await page.evaluate(() => JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage }) + document.documentElement.outerHTML);
   expect(stored).not.toContain(key);
 });
+
+test("closing the menu while a save is in flight leaves it usable", async ({ page }) => {
+  let release = () => {};
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route(settingsAPI, async (route) => {
+    if (route.request().method() === "PUT") await held;
+    return route.fulfill({ json: stubSettings(true) });
+  });
+  await page.goto(app);
+  const trigger = page.getByRole("button", { name: "Model settings" });
+  await trigger.click();
+  const menu = page.getByRole("dialog", { name: "Model settings" });
+  await menu.getByRole("button", { name: "Save" }).click();
+  await expect(menu.getByRole("button", { name: "Saving…" })).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+  release();
+  await trigger.click();
+  await expect(menu.getByRole("button", { name: "Save" })).toBeEnabled();
+  await expect(menu.getByRole("button", { name: "Clear key" })).toBeEnabled();
+});
+
 
 test("a path that is not a repo says so", async ({ page }) => {
   await page.goto(`${app}#/new`);

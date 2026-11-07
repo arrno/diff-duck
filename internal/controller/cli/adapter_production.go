@@ -14,5 +14,6 @@ func verificationModel(adapter string) (ports.LanguageModel, error) {
 	return nil, fmt.Errorf("unknown adapter %q: use claude-cli or anthropic-api", adapter)
 }
 
-// secretStore is the OS keychain.
-func secretStore() ports.SecretStore { return keyring.New() }
+// secretStore is the OS keychain. It serves as both ports.SecretStore and ports.KeySource;
+// build it once and share it.
+func secretStore() *keyring.Keychain { return keyring.New() }
