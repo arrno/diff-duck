@@ -123,7 +123,10 @@ func (d *StructuralDiffer) analyze(ctx context.Context, baseSHA, headSHA string,
 			}
 			return domain.FileAnalysis{}, err, nil
 		}
-		analysis, err := analyzer.Analyze(p, src)
+		analysis, err := analyzer.Analyze(ctx, p, src)
+		if err != nil && ctx.Err() != nil {
+			return domain.FileAnalysis{}, nil, ctx.Err()
+		}
 		return analysis, err, nil
 	}
 	if change.OldPath != "" {
@@ -164,7 +167,7 @@ func (d *StructuralDiffer) packageExists(ctx context.Context, sha string, ref do
 			if err != nil {
 				return true
 			}
-			analysis, err := analyzer.Analyze(p, src)
+			analysis, err := analyzer.Analyze(ctx, p, src)
 			if err != nil || analysis.Package == ref {
 				return true
 			}
@@ -399,11 +402,14 @@ func (b *treeBuilder) absorb(old *keyedUnit, n *domain.Node) {
 
 // followRenamedFiles keeps identity when git reports a file as renamed into another package,
 // such as a directory rename. A unit with the same name in the renamed file is the same unit.
+// Where the file is a module, its units' names are qualified by the module's name, so they are
+// compared with the old module name replaced by the new one.
 func (b *treeBuilder) followRenamedFiles(files []*analyzedFile, changed []*keyedUnit) []*keyedUnit {
-	renamedTo := map[string]string{}
+	type rename struct{ path, oldModule, newModule string }
+	renamedTo := map[string]rename{}
 	for _, f := range files {
 		if f.change.Status == domain.FileRenamed {
-			renamedTo[f.change.OldPath] = f.change.NewPath
+			renamedTo[f.change.OldPath] = rename{f.change.NewPath, moduleName(f.before), moduleName(f.after)}
 		}
 	}
 	if len(renamedTo) == 0 {
@@ -424,7 +430,11 @@ func (b *treeBuilder) followRenamedFiles(files []*analyzedFile, changed []*keyed
 		if b.nodeFor[old.key].Op != domain.OpRemove {
 			continue
 		}
-		cur := added[place{renamedTo[old.File], old.Name, old.Kind}]
+		r, ok := renamedTo[old.File]
+		if !ok {
+			continue
+		}
+		cur := added[place{r.path, domain.Requalify(old.Name, r.oldModule, r.newModule), old.Kind}]
 		if cur == nil {
 			continue
 		}
@@ -452,6 +462,16 @@ func (b *treeBuilder) followRenamedFiles(files []*analyzedFile, changed []*keyed
 		}
 	}
 	return kept
+}
+
+// moduleName returns the name of the module unit among a file's units, or empty.
+func moduleName(units []*keyedUnit) string {
+	for _, u := range units {
+		if u.Kind == domain.KindModule {
+			return u.Name
+		}
+	}
+	return ""
 }
 
 // detectReorderedFields finds structs whose surviving fields changed relative order. No field
@@ -526,41 +546,51 @@ func (b *treeBuilder) register(key string, n *domain.Node) {
 	b.nodeFor[key] = n
 }
 
+// maxNesting bounds how many enclosing units are followed, so malformed parent names can never
+// loop. Real code nests far less deeply.
+const maxNesting = 64
+
 // attach places a changed unit's node under its structural parent, creating the ancestors
-// needed to show where it lives. An ancestor created only for that reason is inherited.
+// needed to show where it lives, at any depth. An ancestor created only for that reason is
+// inherited.
 func (b *treeBuilder) attach(u *keyedUnit, before, after map[string]*keyedUnit, byName map[string][]*keyedUnit) {
-	n := b.nodeFor[u.key]
-	var parent *domain.Node
-	if u.Parent != "" {
-		parent = b.typeAncestor(u, before, after, byName)
-	} else {
-		parent = b.packageNode(u.Package)
-	}
-	link(b, parent, n)
+	link(b, b.parentOf(u, before, after, byName, 0), b.nodeFor[u.key])
 }
 
-func (b *treeBuilder) typeAncestor(u *keyedUnit, before, after map[string]*keyedUnit, byName map[string][]*keyedUnit) *domain.Node {
+// parentOf returns the node a unit belongs under: its enclosing unit, or its package.
+func (b *treeBuilder) parentOf(u *keyedUnit, before, after map[string]*keyedUnit, byName map[string][]*keyedUnit, depth int) *domain.Node {
+	if u.Parent == "" || depth >= maxNesting {
+		return b.packageNode(u.Package)
+	}
+	return b.typeAncestor(u, before, after, byName, depth)
+}
+
+func (b *treeBuilder) typeAncestor(u *keyedUnit, before, after map[string]*keyedUnit, byName map[string][]*keyedUnit, depth int) *domain.Node {
 	pkg := u.Package.Key()
 	base := pkg + "::" + u.Parent
 	key := base
-	var unit *keyedUnit
-	// Prefer the declaration in the same file when the name is ambiguous.
-	candidates := byName[base]
-	for _, c := range candidates {
-		if c.File == u.File {
-			unit = c
-			break
-		}
-	}
-	if unit == nil && len(candidates) > 0 {
-		unit = candidates[0]
-	}
+	unit := enclosingCandidate(u, byName[base], after)
 	if unit != nil {
 		key = unit.key
 	}
+	// The ancestor's own parent, so that nesting is kept however deep it goes.
+	enclosing := func(owner *keyedUnit) *domain.Node {
+		if owner == nil {
+			return b.packageNode(u.Package)
+		}
+		return b.parentOf(owner, before, after, byName, depth+1)
+	}
 	if existing, ok := b.nodeFor[key]; ok {
 		if _, attached := b.parents[existing.ID]; !attached {
-			link(b, b.packageNode(u.Package), existing)
+			// The node may now stand for a different unit, such as the moved declaration that
+			// absorbed this one. Its place comes from that unit, the one it shows.
+			owner := unit
+			if cur := after[existing.ID]; cur != nil {
+				owner = cur
+			} else if old := before[existing.ID]; old != nil {
+				owner = old
+			}
+			link(b, enclosing(owner), existing)
 		}
 		return existing
 	}
@@ -584,8 +614,35 @@ func (b *treeBuilder) typeAncestor(u *keyedUnit, before, after map[string]*keyed
 		addLocation(n, unit, side)
 	}
 	b.register(key, n)
-	link(b, b.packageNode(u.Package), n)
+	link(b, enclosing(unit), n)
 	return n
+}
+
+// enclosingCandidate picks which same-named declaration encloses a unit. Names can repeat, as
+// with classes defined in both branches of an if, so it prefers the declaration in the same
+// file, on the same side of the diff, whose lines contain the unit's.
+func enclosingCandidate(u *keyedUnit, candidates []*keyedUnit, after map[string]*keyedUnit) *keyedUnit {
+	isHead := after[u.key] == u
+	score := func(c *keyedUnit) int {
+		if c.File != u.File {
+			return 0
+		}
+		s := 1
+		if c.StartLine <= u.StartLine && c.EndLine >= u.EndLine {
+			s += 2
+			if (after[c.key] == c) == isHead {
+				s++
+			}
+		}
+		return s
+	}
+	var best *keyedUnit
+	for _, c := range candidates {
+		if best == nil || score(c) > score(best) {
+			best = c
+		}
+	}
+	return best
 }
 
 func (b *treeBuilder) packageNode(ref domain.PackageRef) *domain.Node {
@@ -881,7 +938,9 @@ func explainUnit(n *domain.Node) {
 	}
 	if len(n.Children) == 0 {
 		switch n.Kind {
-		case domain.KindField, domain.KindConst, domain.KindInterfaceMethod, domain.KindStruct, domain.KindInterface, domain.KindType:
+		// A property is ordered with fields but can have accessor bodies, so it is explained
+		// like a method.
+		case domain.KindField, domain.KindConst, domain.KindInterfaceMethod, domain.KindStruct, domain.KindInterface, domain.KindType, domain.KindEnumMember:
 			n.Summary.Origin = domain.OriginStructural
 			return
 		case domain.KindVar:
@@ -896,11 +955,12 @@ func explainUnit(n *domain.Node) {
 
 func kindRank(k domain.UnitKind) int {
 	switch k {
-	case domain.KindStruct, domain.KindInterface, domain.KindType:
+	case domain.KindModule, domain.KindStruct, domain.KindInterface, domain.KindType,
+		domain.KindClass, domain.KindEnum, domain.KindTrait, domain.KindRecord:
 		return 0
 	case domain.KindFunction, domain.KindMethod, domain.KindInterfaceMethod:
 		return 1
-	case domain.KindField:
+	case domain.KindField, domain.KindProperty, domain.KindEnumMember:
 		return 2
 	case domain.KindConst, domain.KindVar:
 		return 3

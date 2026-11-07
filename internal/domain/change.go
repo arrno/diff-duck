@@ -1,6 +1,8 @@
 // Package domain defines the compressed diff and the facts it is derived from.
 package domain
 
+import "strings"
+
 // FileStatus is how Git classifies a changed file.
 type FileStatus string
 
@@ -97,4 +99,23 @@ type FileAnalysis struct {
 	// Constraints holds what decides whether the file is compiled at all. It lives outside
 	// any code unit, so it needs its own comparison.
 	Constraints string
+}
+
+// QualifiedName names a unit declared inside another, such as a method in a class or a class in
+// a module: "util" and "Repo" give "util.Repo".
+func QualifiedName(scope, name string) string { return scope + "." + name }
+
+// Requalify gives a name qualified by one scope the same name in another, as when a module is
+// renamed: Requalify("old.Repo.get", "old", "new") is "new.Repo.get". Other names are returned
+// unchanged.
+func Requalify(name, from, to string) string {
+	switch {
+	case from == "" || to == "":
+		return name
+	case name == from:
+		return to
+	case strings.HasPrefix(name, from+"."):
+		return to + name[len(from):]
+	}
+	return name
 }

@@ -17,7 +17,6 @@ import (
 	"github.com/arrno/diff-duck/internal/adapters/anthropicapi"
 	"github.com/arrno/diff-duck/internal/adapters/claudecli"
 	"github.com/arrno/diff-duck/internal/adapters/gitrepo"
-	"github.com/arrno/diff-duck/internal/adapters/goanalysis"
 	"github.com/arrno/diff-duck/internal/adapters/modelcache"
 	"github.com/arrno/diff-duck/internal/adapters/promptfiles"
 	"github.com/arrno/diff-duck/internal/controller/htmlview"
@@ -157,7 +156,12 @@ func execute(ctx context.Context, opts options, target, base, head string, stdou
 		}
 	}
 
-	differ := services.NewStructuralDiffer(repo, goanalysis.New())
+	analyzers, closeAnalyzers, err := buildAnalyzers(ctx)
+	if err != nil {
+		return err
+	}
+	defer closeAnalyzers()
+	differ := services.NewStructuralDiffer(repo, analyzers...)
 	compressor := services.NewDiffCompressor(repo, differ, model, source, opts.concurrency)
 	result, compressErr := compressor.Compress(ctx, services.CompressRequest{
 		Repository:    target,

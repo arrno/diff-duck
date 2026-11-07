@@ -4,6 +4,7 @@ package goanalysis
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -29,8 +30,8 @@ func New() *Analyzer { return &Analyzer{} }
 // Supports reports whether the path is a Go source file.
 func (*Analyzer) Supports(p string) bool { return strings.HasSuffix(p, ".go") }
 
-// Analyze parses one Go file into units.
-func (*Analyzer) Analyze(p string, src []byte) (domain.FileAnalysis, error) {
+// Analyze parses one Go file into units. Parsing Go is fast and bounded, so ctx is unused.
+func (*Analyzer) Analyze(_ context.Context, p string, src []byte) (domain.FileAnalysis, error) {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, p, src, parser.ParseComments|parser.SkipObjectResolution)
 	if err != nil {

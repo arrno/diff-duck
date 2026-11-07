@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/arrno/diff-duck/internal/adapters/gitrepo"
-	"github.com/arrno/diff-duck/internal/adapters/goanalysis"
 	"github.com/arrno/diff-duck/internal/adapters/sqlitestore"
 	"github.com/arrno/diff-duck/internal/controller/htmlview"
 	"github.com/arrno/diff-duck/internal/controller/server"
@@ -115,11 +114,16 @@ func serve(ctx context.Context, opts serveOptions, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
+	analyzers, closeAnalyzers, err := buildAnalyzers(ctx)
+	if err != nil {
+		return err
+	}
+	defer closeAnalyzers()
 
 	library := services.NewDiffLibrary(services.LibraryDeps{
 		Store:         store,
 		Repositories:  gitrepo.Source{},
-		Analyzer:      goanalysis.New(),
+		Analyzers:     analyzers,
 		Model:         model,
 		Prompts:       prompts,
 		Concurrency:   opts.concurrency,

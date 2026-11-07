@@ -5,6 +5,7 @@ go 1.26.2
 require (
 	github.com/anthropics/anthropic-sdk-go/v2 v2.6.0
 	github.com/openai/openai-go/v3 v3.96.0
+	github.com/tetratelabs/wazero v1.12.0
 	github.com/zalando/go-keyring v0.2.8
 	modernc.org/sqlite v1.61.1
 )
