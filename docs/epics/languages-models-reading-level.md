@@ -165,3 +165,17 @@ provider with no key saved and none given is a 400.
   must fail the run with a clear "no API key saved" error (`ports.ErrKeyNotSaved`).
 - **For S6:** never log or echo request bodies; `http.MaxBytesReader` on PUT; Host/Origin checks
   on PUT and DELETE; saving while pinned is allowed (the pin only overrides the provider).
+- **S3 done** (merged). `codexcli.New/Available`, `claudecli.Available`,
+  `openaiapi.New(apiKey, model, effort)`, `anthropicapi.NewWithKey(apiKey, model, effort)`.
+  Codex runs with every disableable feature off, read-only sandbox, killed at the first tool
+  item; residual risk documented in the package doc. Both service schemas already satisfy
+  OpenAI strict mode.
+- **For S5:** pass explicit, non-empty model IDs for every provider (an empty Codex model makes
+  `Describe()` `codex-cli//`, so the cache identity wouldn't change when Codex's default does).
+  OpenAI default candidate: `gpt-6.1-sol` (must allow 32k output tokens). Review the 15-minute
+  Codex per-call timeout against batch sizes.
+- **S5/S6 file split (running concurrently):** S6 adds `internal/controller/cli/provider_availability.go`
+  (a minimal stand-in) and composes SettingsKeeper in `serve.go`. S5 puts the ModelOpener *and*
+  the real ProviderAvailability in `internal/controller/cli/model_opener.go`, and does not edit
+  S6's file. The orchestrator deletes S6's stand-in at integration and points SettingsKeeper at
+  S5's implementation.
