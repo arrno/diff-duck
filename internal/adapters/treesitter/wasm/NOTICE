@@ -1,0 +1,34 @@
+Embedded tree-sitter WebAssembly modules
+========================================
+
+Each <language>.wasm in this directory is one wasm32-wasi reactor module that contains:
+
+  - the tree-sitter core library        MIT            LICENSES/tree-sitter.txt
+  - one tree-sitter grammar             see its file   LICENSES/<language>.txt
+  - DiffDuck's shim (../shim/shim.c)    this repository's licence
+  - wasi-libc, linked in by zig         Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT,
+                                        with musl (MIT), dlmalloc (CC0), and cloudlibc
+                                        (BSD-2-Clause) portions   LICENSES/wasi-libc.txt
+
+The tree-sitter core includes src/portable/endian.h by Mathias Panzenböck, placed in the public
+domain (or, where that is not possible, under BSD, MIT, or Apache licences at your option).
+
+Provenance
+----------
+
+Nothing here is downloaded as a binary. scripts/build-treesitter-wasm.sh compiles every module
+from source:
+
+  - core:     github.com/tree-sitter/go-tree-sitter at the version pinned in the script (its
+              src/ and include/ are the official tree-sitter C library),
+  - grammars: the module and version pinned in scripts/treesitter/<language>.env,
+
+both fetched through the Go module proxy, so sum.golang.org verifies their contents. The
+compiler is zig 0.13.0 (pinned; the --docker mode installs the official release tarball and
+checks its sha256). The same inputs produce byte-identical modules.
+
+Rebuild one language with `make treesitter-wasm GRAMMAR=python`, or all with
+`make treesitter-wasm`.
+
+typescript.wasm and tsx.wasm are the two dialects of one grammar module, tree-sitter-typescript;
+LICENSES/typescript.txt and LICENSES/tsx.txt hold its one licence.

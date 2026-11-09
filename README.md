@@ -38,7 +38,7 @@ Also:
 - **Agent friendly.** One command builds a diff and prints its link, so your coding agent can
   "diffduck it" for you.
 
-Go code gets the full structural tree today. Other files appear as file-level changes.
+Go, Python, JavaScript/TypeScript, Rust, C#, and Java code gets the full structural tree. Other files appear as file-level changes.
 
 ## Install
 
@@ -69,13 +69,17 @@ commits by hand.
 | `diffduck up` | Start the app in the background and print its address. Optional, since every `diff` command starts it. |
 | `diffduck status` | Say whether the app is running, and where. |
 | `diffduck down` | Stop the app. |
-| `diffduck reset` | Delete every saved diff. Asks first, or pass `--yes`. |
+| `diffduck reset` | Delete every saved diff. Model settings are kept. Asks first, or pass `--yes`. |
 | `diffduck serve` | Run the app in this terminal instead of the background. |
 
 Settings are flags on `up` (or `serve`) and apply until the next `down`. For example,
-`diffduck up --port 8080` or `diffduck up --adapter anthropic-api`. By default, summaries come from
-Claude through the `claude` CLI. The `anthropic-api` adapter uses `ANTHROPIC_API_KEY` instead. A
-`diff` that has to start the app uses the defaults.
+`diffduck up --port 8080`. Each new diff uses the provider and reading level saved in the app's
+Model settings (default: Claude Code through the `claude` CLI, at a 6th-grade reading level).
+`--adapter` (`claude-cli`, `codex-cli`, `anthropic-api`, or `openai-api`) pins every diff to that
+adapter whatever provider is saved; when chosen this way, `anthropic-api` reads
+`ANTHROPIC_API_KEY` and `openai-api` reads `OPENAI_API_KEY`, while providers chosen in the app use
+keys saved in the OS keychain. `--model` sets the model only for the provider `--adapter` names
+(`claude-cli` when not given). A `diff` that has to start the app uses the defaults.
 
 Run `diffduck -h` for every flag, including a one-shot form that writes a standalone HTML file
 without the app.

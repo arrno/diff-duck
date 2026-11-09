@@ -21,11 +21,12 @@ drives it from a shell, so a person or a coding agent can say "diffduck it" and 
 
 | Topic | Decision |
 | --- | --- |
-| Language | Go first, through `go/parser`. Other languages add a `SourceAnalyzer` adapter. |
+| Language | Go through `go/parser`. Python, JavaScript/TypeScript, Rust, C#, and Java through tree-sitter grammars compiled to WASM and run by wazero, so the build stays cgo-free (one module per language, embedded; see [the epic](epics/languages-models-reading-level.md)). Other languages add a `SourceAnalyzer` adapter. |
 | Input | A GitHub (or other https/ssh) repo URL, or a local path to a Git repo. |
 | Quality goal | Structural facts are deterministic and strictly tested. Summaries are judged for quality, not determinism. |
 | Prompts | Markdown files, one directory per variant, injected with `--prompts`. Every run records the variant and prompt hashes. |
-| Model access | A `LanguageModel` port. Adapters: `claude-cli` (default, cheaper) and `anthropic-api`. Default model: Sonnet. Each run has a call limit. |
+| Model access | A `LanguageModel` port, opened per run by a `ModelOpener` from app-wide settings. Providers: Claude Code (`claude-cli`, default), Codex (`codex-cli`), Anthropic API, OpenAI API; API keys live in the OS keychain. `--adapter` pins a provider. Each run has a call limit. |
+| Reading level | Five levels (2nd grade to PhD), saved app-wide, default 6th grade. Each level's instructions are Markdown in the prompt variant and part of the cache identity. |
 | UI | React and shadcn/ui in `clients/viewer`, built into one HTML page. Standalone, the page holds one diff and needs no server. Under `diffduck serve`, the same page is the app. This is an agreed exception to `ui-architecture.md`: no Next.js or login, because the app is local to one person. Its component, theming, accessibility, and Playwright rules still apply. |
 | Local app | Listens only on `127.0.0.1`. Every request must name this server in `Host` and must not come from another site, because the API runs git and spends model calls. Every diff is saved when requested, one runs at a time, and a failed or stopped run stays listed. |
 | App commands | The CLI is a client of the app's own HTTP API, so the browser and the shell share one server, one queue, and one database. The running server records its PID and port in `server.json` in the DiffDuck home (`$DIFFDUCK_HOME`, default `diff-duck` in the user config directory); a command trusts the record only when `/api/health` answers with that PID. `diff` starts the app when none is running. Relative repo paths are resolved by the caller, not the server. |

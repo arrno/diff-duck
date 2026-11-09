@@ -3,7 +3,8 @@
 export type ChangeOp = "ADD" | "REMOVE" | "CHANGE";
 export type UnitKind =
   | "PACKAGE" | "STRUCT" | "INTERFACE" | "TYPE" | "FUNCTION" | "METHOD"
-  | "INTERFACE_METHOD" | "FIELD" | "CONST" | "VAR" | "FILE" | "REGION";
+  | "INTERFACE_METHOD" | "FIELD" | "CONST" | "VAR" | "FILE" | "REGION"
+  | "MODULE" | "CLASS" | "ENUM" | "ENUM_MEMBER" | "TRAIT" | "RECORD" | "PROPERTY";
 
 export interface DiffLine {
   kind: "context" | "added" | "removed" | "gap";
@@ -78,10 +79,42 @@ export interface CompressedDiff {
   added: number;
   removed: number;
   coverage: { changedLines: number; tracedLines: number; changedFiles: number; tracedFiles: number };
-  generation: { model: string; promptVariant: string };
+  generation: Generation;
   metrics: { compressionRatio: number };
   warnings?: string[];
 }
+
+export type ProviderId = "claude-code" | "codex" | "anthropic-api" | "openai-api";
+export type ReadingLevelId = "2nd-grade" | "6th-grade" | "high-school" | "college" | "phd";
+
+/** How a diff's summaries were written. Diffs saved before provider and reading level were recorded lack them. */
+export interface Generation {
+  model: string;
+  promptVariant: string;
+  provider?: ProviderId;
+  readingLevel?: ReadingLevelId;
+}
+
+const PROVIDER_LABELS: Record<ProviderId, string> = {
+  "claude-code": "Claude Code",
+  codex: "Codex",
+  "anthropic-api": "Anthropic API",
+  "openai-api": "OpenAI API",
+};
+
+/** The five reading levels, plainest first. */
+export const READING_LEVELS: { id: ReadingLevelId; label: string }[] = [
+  { id: "2nd-grade", label: "2nd grade" },
+  { id: "6th-grade", label: "6th grade" },
+  { id: "high-school", label: "High school" },
+  { id: "college", label: "College" },
+  { id: "phd", label: "PhD" },
+];
+
+/** A provider's name as a person reads it, or the ID itself if this viewer does not know it. */
+export const providerLabel = (id: string) => PROVIDER_LABELS[id as ProviderId] ?? id;
+/** A reading level's name as a person reads it, or the ID itself if this viewer does not know it. */
+export const readingLevelLabel = (id: string) => READING_LEVELS.find((l) => l.id === id)?.label ?? id;
 
 /** The diff embedded in a standalone page, or null when this page is the interactive app. */
 export function loadModel(): CompressedDiff | null {

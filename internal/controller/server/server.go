@@ -41,10 +41,18 @@ type Health struct {
 	PID int    `json:"pid"`
 }
 
+// SettingsKeeper reads and saves the app-wide model settings. *services.SettingsKeeper
+// implements it.
+type SettingsKeeper interface {
+	Current(ctx context.Context) (services.SettingsView, error)
+	Save(ctx context.Context, provider, readingLevel, apiKey string) (services.SettingsView, error)
+	ClearKey(ctx context.Context, provider string) (services.SettingsView, error)
+}
+
 // Handler returns the interface for a server reachable at port on the loopback address. page
 // is the application page.
-func Handler(library *services.DiffLibrary, page []byte, port int) http.Handler {
-	api := &api{library: library}
+func Handler(library *services.DiffLibrary, settings SettingsKeeper, page []byte, port int) http.Handler {
+	api := &api{library: library, settings: settings}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -60,6 +68,9 @@ func Handler(library *services.DiffLibrary, page []byte, port int) http.Handler 
 	mux.HandleFunc("POST /api/diffs", api.createDiff)
 	mux.HandleFunc("GET /api/diffs/{id}", api.getDiff)
 	mux.HandleFunc("DELETE /api/diffs/{id}", api.deleteDiff)
+	mux.HandleFunc("GET /api/settings", api.getSettings)
+	mux.HandleFunc("PUT /api/settings", api.saveSettings)
+	mux.HandleFunc("DELETE /api/settings/keys/{provider}", api.clearKey)
 	return guard(mux, port)
 }
 
@@ -93,7 +104,8 @@ func guard(next http.Handler, port int) http.Handler {
 }
 
 type api struct {
-	library *services.DiffLibrary
+	library  *services.DiffLibrary
+	settings SettingsKeeper
 }
 
 func (a *api) commits(w http.ResponseWriter, r *http.Request) {
@@ -125,20 +137,8 @@ type createDiffRequest struct {
 }
 
 func (a *api) createDiff(w http.ResponseWriter, r *http.Request) {
-	// A JSON content type cannot be sent cross-site without the browser asking permission first.
-	if media, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err != nil || media != "application/json" {
-		writeError(w, http.StatusUnsupportedMediaType, "Send JSON.")
-		return
-	}
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodyBytes))
-	decoder.DisallowUnknownFields()
 	var req createDiffRequest
-	if err := decoder.Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "The request could not be read.")
-		return
-	}
-	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
-		writeError(w, http.StatusBadRequest, "The request could not be read.")
+	if !readJSON(w, r, &req) {
 		return
 	}
 	diff, err := a.library.StartDiff(r.Context(), ResolveRepository(req.Repository), strings.TrimSpace(req.Base), strings.TrimSpace(req.Head))
@@ -164,6 +164,81 @@ func (a *api) deleteDiff(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (a *api) getSettings(w http.ResponseWriter, r *http.Request) {
+	view, err := a.settings.Current(r.Context())
+	writeSettings(w, view, err)
+}
+
+// saveSettingsRequest carries an API key, so neither it nor a decoding error is ever logged or
+// written back (K1).
+type saveSettingsRequest struct {
+	Provider     string `json:"provider"`
+	ReadingLevel string `json:"readingLevel"`
+	APIKey       string `json:"apiKey"`
+}
+
+func (a *api) saveSettings(w http.ResponseWriter, r *http.Request) {
+	var req saveSettingsRequest
+	if !readJSON(w, r, &req) {
+		return
+	}
+	view, err := a.settings.Save(r.Context(), req.Provider, req.ReadingLevel, req.APIKey)
+	// The service never puts a key in an error; this keeps it out even if that changes. The
+	// trimmed key is what the service uses, and it is inside the key as sent.
+	if secret := strings.TrimSpace(req.APIKey); err != nil && secret != "" {
+		err = redacted{err: err, secret: secret}
+	}
+	writeSettings(w, view, err)
+}
+
+// redacted hides a secret in an error's message while keeping what it wraps.
+type redacted struct {
+	err    error
+	secret string
+}
+
+func (r redacted) Error() string { return strings.ReplaceAll(r.err.Error(), r.secret, "[redacted]") }
+func (r redacted) Unwrap() error { return r.err }
+
+func (a *api) clearKey(w http.ResponseWriter, r *http.Request) {
+	view, err := a.settings.ClearKey(r.Context(), r.PathValue("provider"))
+	writeSettings(w, view, err)
+}
+
+// writeSettings answers with the settings, or with a failure the person can act on. The
+// service's messages for the errors shown here name providers and levels, never a key.
+func writeSettings(w http.ResponseWriter, view services.SettingsView, err error) {
+	switch {
+	case err == nil:
+		writeJSON(w, http.StatusOK, view)
+	case errors.Is(err, services.ErrInvalidSettings), errors.Is(err, services.ErrProviderUnavailable), errors.Is(err, services.ErrKeyRequired):
+		writeError(w, http.StatusBadRequest, err.Error())
+	default:
+		writeFailure(w, err)
+	}
+}
+
+// readJSON decodes one JSON object of a known shape into v, or answers with the failure. It
+// never repeats the body or the decoder's error, which can quote the body.
+func readJSON(w http.ResponseWriter, r *http.Request, v any) bool {
+	// A JSON content type cannot be sent cross-site without the browser asking permission first.
+	if media, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err != nil || media != "application/json" {
+		writeError(w, http.StatusUnsupportedMediaType, "Send JSON.")
+		return false
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodyBytes))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(v); err != nil {
+		writeError(w, http.StatusBadRequest, "The request could not be read.")
+		return false
+	}
+	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
+		writeError(w, http.StatusBadRequest, "The request could not be read.")
+		return false
+	}
+	return true
 }
 
 // ResolveRepository turns what a person typed into an absolute path or a clone URL, because the

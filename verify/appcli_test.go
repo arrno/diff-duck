@@ -2,12 +2,16 @@ package verify
 
 import (
 	"encoding/json"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/arrno/diff-duck/internal/domain"
 )
 
 // appCLI runs the app commands against their own home directory, so they never touch the
@@ -15,6 +19,7 @@ import (
 type appCLI struct {
 	t    *testing.T
 	home string
+	env  []string // added to the environment of every command, overriding what it names
 }
 
 func newAppCLI(t *testing.T) *appCLI {
@@ -27,7 +32,7 @@ func (c *appCLI) run(args ...string) (int, string, string) {
 	c.t.Helper()
 	cmd := exec.Command(binary, args...)
 	cmd.Dir = fixture
-	cmd.Env = append(os.Environ(), "DIFFDUCK_HOME="+c.home)
+	cmd.Env = append(append(os.Environ(), c.env...), "DIFFDUCK_HOME="+c.home)
 	var stdout, stderr strings.Builder
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err := cmd.Run()
@@ -100,6 +105,13 @@ func TestAppCommandsLifecycle(t *testing.T) {
 		t.Fatalf("delete removed the wrong diffs: %+v", remaining)
 	}
 
+	// Reset deletes diffs, never the model settings.
+	var settings struct {
+		Provider     string `json:"provider"`
+		ReadingLevel string `json:"readingLevel"`
+	}
+	appJSON(t, "PUT", url+"api/settings", `{"provider":"codex","readingLevel":"phd"}`, &settings)
+
 	if code, _, _ := c.run("reset"); code != 2 {
 		t.Fatalf("reset without --yes and without an answer must refuse, got %d", code)
 	}
@@ -113,6 +125,11 @@ func TestAppCommandsLifecycle(t *testing.T) {
 	if left := c.list(); len(left) != 0 {
 		t.Fatalf("reset left diffs: %+v", left)
 	}
+	restarted := appURL.FindString(reset)
+	appJSON(t, "GET", restarted+"api/settings", "", &settings)
+	if settings.Provider != "codex" || settings.ReadingLevel != "phd" {
+		t.Fatalf("reset must keep the settings: %+v", settings)
+	}
 
 	if out := c.must("down"); !strings.Contains(out, "stopped") {
 		t.Fatalf("down: %q", out)
@@ -122,6 +139,70 @@ func TestAppCommandsLifecycle(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(c.home, "server.json")); !os.IsNotExist(err) {
 		t.Fatalf("down left the server record: %v", err)
+	}
+}
+
+// appJSON sends one request to the running app and decodes its JSON answer.
+func appJSON(t *testing.T, method, url, body string, into any) {
+	t.Helper()
+	req, err := http.NewRequest(method, url, strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("%s %s: %d %s", method, url, resp.StatusCode, data)
+	}
+	if err := json.Unmarshal(data, into); err != nil {
+		t.Fatalf("%s %s: %v", method, url, err)
+	}
+}
+
+func TestB6SavedReadingLevelReachesTheNextDiffAndSurvivesARestart(t *testing.T) {
+	c := newAppCLI(t)
+	url := appURL.FindString(c.must("up", "--adapter", "scripted:normal", "--no-cache", "--port", "0"))
+	if url == "" {
+		t.Fatal("up printed no address")
+	}
+	// Pinned, so a provider this machine may lack can still be saved alongside the level.
+	var settings struct {
+		Provider     string `json:"provider"`
+		ReadingLevel string `json:"readingLevel"`
+		Pinned       string `json:"pinned"`
+	}
+	appJSON(t, "PUT", url+"api/settings", `{"provider":"codex","readingLevel":"phd"}`, &settings)
+	if settings.ReadingLevel != "phd" || settings.Pinned != "scripted:normal" {
+		t.Fatalf("save: %+v", settings)
+	}
+
+	out := c.must("diff", ".", "-f", "base", "-t", "head", "--no-open", "--wait")
+	id := regexp.MustCompile(`#/diffs/([A-Za-z0-9]+)`).FindStringSubmatch(out)
+	if id == nil {
+		t.Fatalf("no diff address: %q", out)
+	}
+	var saved struct {
+		Result struct {
+			Generation domain.Generation `json:"generation"`
+		} `json:"result"`
+	}
+	appJSON(t, "GET", url+"api/diffs/"+id[1], "", &saved)
+	if g := saved.Result.Generation; g.ReadingLevel != domain.ReadingPhD || g.Provider != "" {
+		t.Fatalf("the diff must record the saved level, and no provider for the pinned scripted adapter: %+v", g)
+	}
+
+	c.must("down")
+	url = appURL.FindString(c.must("up", "--adapter", "scripted:normal", "--no-cache", "--port", "0"))
+	appJSON(t, "GET", url+"api/settings", "", &settings)
+	if settings.Provider != "codex" || settings.ReadingLevel != "phd" {
+		t.Fatalf("settings after a restart: %+v", settings)
 	}
 }
 

@@ -92,7 +92,7 @@ func (r *repoSource) Open(ctx context.Context, _ string) (ports.OpenRepository, 
 }
 
 func newLibrary(store ports.DiffStore, source ports.RepositorySource) *DiffLibrary {
-	return NewDiffLibrary(LibraryDeps{Store: store, Repositories: source, Concurrency: 1})
+	return NewDiffLibrary(LibraryDeps{Store: store, Repositories: source, Models: &recordingOpener{model: &fakeModel{answer: answerAll}}, Prompts: fakePrompts{}, Concurrency: 1})
 }
 
 func waitFor(t *testing.T, condition func() bool) {
