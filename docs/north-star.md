@@ -15,7 +15,7 @@ and open, list, or delete the diffs it keeps.
 
 `diffduck up`, `down`, `status`, and `reset` run that app in the background, and `diffduck diff`
 drives it from a shell, so a person or a coding agent can say "diffduck it" and get a page:
-`diffduck diff [repo] -f <from> -t <to>`, `diff list`, `diff open`, `diff delete`.
+`diffduck diff [repo] -f <from> -t <to>`, `diff list`, `diff show`, `diff open`, `diff delete`, and `settings` (`set`, `clear-key`).
 
 ## Decisions
 

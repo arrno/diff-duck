@@ -34,8 +34,14 @@ The app:
 Diffs (these start the app if it is not running):
   diffduck diff [repo] [-f from] [-t to]    build a diff and open it (default: . HEAD~1 HEAD)
   diffduck diff list [--json]               list saved diffs
+  diffduck diff show <id> [--json]          print one saved diff
   diffduck diff open [id]                   open the app, or one diff, in the browser
   diffduck diff delete <id>...              delete saved diffs
+
+Model settings (these start the app if it is not running):
+  diffduck settings [--json]                show the provider, reading level, and saved keys
+  diffduck settings set [flags]             change them; an API key is read from a pipe
+  diffduck settings clear-key <provider>    remove a saved API key
 
 Run "diffduck <command> -h" for a command's flags.
 
@@ -57,12 +63,13 @@ const (
 )
 
 var commands = map[string]func(context.Context, []string, io.Writer, io.Writer) int{
-	"serve":  runServe,
-	"up":     runUp,
-	"down":   runDown,
-	"status": runStatus,
-	"reset":  runReset,
-	"diff":   runDiff,
+	"serve":    runServe,
+	"up":       runUp,
+	"down":     runDown,
+	"status":   runStatus,
+	"reset":    runReset,
+	"diff":     runDiff,
+	"settings": runSettings,
 }
 
 type options struct {

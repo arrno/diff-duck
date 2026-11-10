@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -17,12 +18,13 @@ import (
 const diffUsage = `Usage:
   diffduck diff [repo] [-f from] [-t to] [--wait] [--no-open]
   diffduck diff list [--json]
+  diffduck diff show <id> [--json]
   diffduck diff open [id]
   diffduck diff delete <id>...
 
 The first form builds a diff in the running app, starting it if needed, and opens it in the
 browser. repo is a path or clone URL (default: the current directory). To diff a directory
-named list, open, or delete, write it as ./list.
+named list, show, open, or delete, write it as ./list.
 
 Flags for building a diff:
 `
@@ -32,6 +34,8 @@ func runDiff(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		switch args[0] {
 		case "list", "ls":
 			return runDiffList(ctx, args[1:], stdout, stderr)
+		case "show":
+			return runDiffShow(ctx, args[1:], stdout, stderr)
 		case "open":
 			return runDiffOpen(ctx, args[1:], stdout, stderr)
 		case "delete", "rm":
@@ -144,9 +148,7 @@ func runDiffList(ctx context.Context, args []string, stdout, stderr io.Writer) i
 		if diffs == nil {
 			diffs = []domain.SavedDiff{}
 		}
-		enc := json.NewEncoder(stdout)
-		enc.SetIndent("", "  ")
-		_ = enc.Encode(diffs)
+		printJSON(stdout, diffs)
 		return exitOK
 	}
 	if len(diffs) == 0 {
@@ -161,6 +163,97 @@ func runDiffList(ctx context.Context, args []string, stdout, stderr io.Writer) i
 	}
 	_ = tw.Flush()
 	return exitOK
+}
+
+func runDiffShow(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("diffduck diff show", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	asJSON := fs.Bool("json", false, "print the whole diff as JSON, including changed lines")
+	positional, code, ok := parseInterleaved(fs, args)
+	if !ok {
+		return code
+	}
+	if len(positional) != 1 {
+		fmt.Fprintln(stderr, "usage: diffduck diff show <id> [--json]")
+		return exitUsage
+	}
+	client, code, ok := connect(ctx, stderr)
+	if !ok {
+		return code
+	}
+	d, err := client.get(ctx, positional[0])
+	if err != nil {
+		return fail(stderr, err)
+	}
+	if *asJSON {
+		printJSON(stdout, d)
+		return exitOK
+	}
+	printDiff(stdout, d)
+	return exitOK
+}
+
+// printDiff writes one saved diff for reading. --json carries everything, including the
+// changed lines; this carries what explains the change.
+func printDiff(w io.Writer, d *domain.SavedDiff) {
+	fmt.Fprintf(w, "Diff %s (%s..%s in %s)\n", d.ID, printable(d.Base), printable(d.Head), printable(d.Repository))
+	fmt.Fprintf(w, "Status: %s\n", d.Status)
+	if d.Stage != "" && d.Status == domain.SavedDiffRunning {
+		fmt.Fprintf(w, "Stage: %s\n", printable(d.Stage))
+	}
+	if d.Error != "" {
+		fmt.Fprintf(w, "Error: %s\n", printable(d.Error))
+	}
+	if d.Result == nil {
+		return
+	}
+	r := d.Result
+	fmt.Fprintf(w, "Change: %d files, +%d -%d\n", r.Files, r.Added, r.Removed)
+	fmt.Fprintf(w, "Coverage: %d/%d lines, %d/%d files\n", r.Coverage.TracedLines, r.Coverage.ChangedLines, r.Coverage.TracedFiles, r.Coverage.ChangedFiles)
+	if r.Overview != "" {
+		fmt.Fprintf(w, "\nOverview:\n%s\n", printable(r.Overview))
+	}
+	if len(r.Outcomes) > 0 {
+		fmt.Fprintln(w, "\nOutcomes:")
+		for _, o := range r.Outcomes {
+			fmt.Fprintf(w, "- [%s] %s\n", o.Op, printable(o.Title))
+			printIndented(w, "", o.Description)
+			printIndented(w, "Uncertain: ", o.Uncertainty)
+		}
+	}
+	if len(r.Nodes) > 0 {
+		fmt.Fprintln(w, "\nChanges:")
+		for _, n := range r.Nodes {
+			printNode(w, n, 0)
+		}
+	}
+	for _, warning := range r.Warnings {
+		fmt.Fprintln(w, "warning:", printable(warning))
+	}
+}
+
+func printIndented(w io.Writer, label, text string) {
+	if text != "" {
+		fmt.Fprintf(w, "  %s%s\n", label, printable(text))
+	}
+}
+
+func printNode(w io.Writer, n *domain.Node, depth int) {
+	indent := strings.Repeat("  ", depth)
+	fmt.Fprintf(w, "%s- [%s] %s %s", indent, n.Op, n.Kind, printable(n.Name))
+	if n.Summary.Text != "" {
+		fmt.Fprintf(w, ": %s", printable(n.Summary.Text))
+	}
+	fmt.Fprintln(w)
+	for _, child := range n.Children {
+		printNode(w, child, depth+1)
+	}
+}
+
+func printJSON(w io.Writer, v any) {
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	_ = enc.Encode(v)
 }
 
 func runDiffOpen(ctx context.Context, args []string, stdout, stderr io.Writer) int {

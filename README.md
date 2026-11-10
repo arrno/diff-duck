@@ -64,15 +64,23 @@ commits by hand.
 | --- | --- |
 | `diffduck diff [repo] [-f from] [-t to]` | Build a diff and open it. Defaults: `.`, `HEAD~1`, `HEAD`. Add `--wait` to wait for it to finish and print the overview, or `--no-open` to skip the browser. |
 | `diffduck diff list [--json]` | List saved diffs and their IDs. |
+| `diffduck diff show <id> [--json]` | Print one saved diff: its overview, outcomes, and changes. `--json` adds everything else, including the changed lines. |
 | `diffduck diff open [id]` | Open the app, or one diff, in the browser. |
 | `diffduck diff delete <id>...` | Delete saved diffs. |
+| `diffduck settings [--json]` | Show the provider, reading level, each provider's availability, and which API keys are saved. Never prints a key. |
+| `diffduck settings set [--provider id] [--reading-level id] [--api-key-stdin] [--json]` | Change the settings new diffs use. A flag left out keeps its saved value. |
+| `diffduck settings clear-key <provider> [--json]` | Remove a saved API key. |
 | `diffduck up` | Start the app in the background and print its address. Optional, since every `diff` command starts it. |
 | `diffduck status` | Say whether the app is running, and where. |
 | `diffduck down` | Stop the app. |
 | `diffduck reset` | Delete every saved diff. Model settings are kept. Asks first, or pass `--yes`. |
 | `diffduck serve` | Run the app in this terminal instead of the background. |
 
-Settings are flags on `up` (or `serve`) and apply until the next `down`. For example,
+API keys are only read from a pipe, so they stay out of shell history and process listings:
+`diffduck settings set --provider openai-api --api-key-stdin < key.txt`. `--api-key-stdin` needs
+`--provider`, and the key is kept in the OS keychain.
+
+Server options are flags on `up` (or `serve`) and apply until the next `down`. For example,
 `diffduck up --port 8080`. Each new diff uses the provider and reading level saved in the app's
 Model settings (default: Claude Code through the `claude` CLI, at a 6th-grade reading level).
 `--adapter` (`claude-cli`, `codex-cli`, `anthropic-api`, or `openai-api`) pins every diff to that
@@ -93,6 +101,11 @@ When I ask you to "diffduck" a change, commit it if it isn't committed, then run
 `diffduck diff -f <base> -t <head> --wait` from the repo (defaults: HEAD~1 and HEAD) and give me
 the URL it prints.
 ```
+
+Agents can drive everything the app's form does. Use `diffduck settings --json` to see the current
+provider and reading level, `diffduck settings set` to change them, `diffduck diff list --json` to
+find diffs, and `diffduck diff show <id> --json` to read one. Errors go to stderr; the exit code is
+`0` on success, `1` on failure, and `2` for a bad command line.
 
 ## Data
 
