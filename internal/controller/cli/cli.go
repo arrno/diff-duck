@@ -30,6 +30,8 @@ The app:
   diffduck status                           say whether it is running, and where
   diffduck reset [--yes]                    delete every saved diff; settings are kept
   diffduck serve [flags]                    run the app in this terminal instead
+  diffduck version                          print the installed version
+  diffduck update [version]                 install the latest (or given) version and restart the app
 
 Diffs (these start the app if it is not running):
   diffduck diff [repo] [-f from] [-t to]    build a diff and open it (default: . HEAD~1 HEAD)
@@ -63,13 +65,16 @@ const (
 )
 
 var commands = map[string]func(context.Context, []string, io.Writer, io.Writer) int{
-	"serve":    runServe,
-	"up":       runUp,
-	"down":     runDown,
-	"status":   runStatus,
-	"reset":    runReset,
-	"diff":     runDiff,
-	"settings": runSettings,
+	"serve":     runServe,
+	"up":        runUp,
+	"down":      runDown,
+	"status":    runStatus,
+	"reset":     runReset,
+	"diff":      runDiff,
+	"settings":  runSettings,
+	"version":   runVersion,
+	"--version": runVersion,
+	"update":    runUpdate,
 }
 
 type options struct {
