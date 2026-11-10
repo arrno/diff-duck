@@ -48,6 +48,20 @@ go install github.com/arrno/diff-duck/cmd/diffduck@latest
 
 Or from a clone: `make build`, which writes `bin/diffduck`.
 
+### Update
+
+```sh
+diffduck update
+```
+
+This runs `go install` for the newest release, then restarts the app if it is running, because a
+running app keeps the old binary until it restarts. Saved diffs, settings, and API keys are kept.
+`diffduck update main` installs the newest commit instead, and `diffduck update v1.2.0` installs a
+given release. `diffduck version` prints what is installed.
+
+If you built from a clone, `git pull && make build`, then `diffduck down`; the next command starts
+the new binary.
+
 ## Use
 
 From inside a Git repo:
@@ -74,6 +88,8 @@ commits by hand.
 | `diffduck status` | Say whether the app is running, and where. |
 | `diffduck down` | Stop the app. |
 | `diffduck reset` | Delete every saved diff. Model settings are kept. Asks first, or pass `--yes`. |
+| `diffduck version` | Print the installed version. |
+| `diffduck update [version]` | Install the newest release, or the given version, and restart the app. |
 | `diffduck serve` | Run the app in this terminal instead of the background. |
 
 API keys are only read from a pipe, so they stay out of shell history and process listings:
@@ -111,3 +127,14 @@ find diffs, and `diffduck diff show <id> --json` to read one. Errors go to stder
 
 Saved diffs, the server record, and its log live in the DiffDuck home: `diff-duck` in your user
 config directory, or `$DIFFDUCK_HOME`. The server listens only on `127.0.0.1`.
+
+## Releasing
+
+`diffduck update` and `go install ...@latest` install the highest release tag, so a change on
+`main` reaches them only once it is tagged:
+
+```sh
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+Until then, `diffduck update main` installs it.

@@ -176,12 +176,18 @@ func ensureServer(ctx context.Context, dir string, stderr io.Writer) (*serverRec
 	return r, nil
 }
 
-// startServer runs `serve` detached, logging to the home directory, and waits for it to answer.
+// startServer runs this binary's `serve` detached. See launchServer.
 func startServer(ctx context.Context, dir string, args []string) (*serverRecord, error) {
 	exe, err := os.Executable()
 	if err != nil {
 		return nil, err
 	}
+	return launchServer(ctx, exe, dir, args)
+}
+
+// launchServer runs exe's `serve` detached, logging to the home directory, and waits for it to
+// answer.
+func launchServer(ctx context.Context, exe, dir string, args []string) (*serverRecord, error) {
 	logFile, err := os.OpenFile(logPath(dir), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if err != nil {
 		return nil, err
