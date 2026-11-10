@@ -13,6 +13,7 @@ import (
 
 	"github.com/arrno/diff-duck/internal/controller/server"
 	"github.com/arrno/diff-duck/internal/domain"
+	"github.com/arrno/diff-duck/internal/services"
 )
 
 // appClient talks to a running DiffDuck server over its loopback API.
@@ -54,6 +55,29 @@ func (c *appClient) list(ctx context.Context) ([]domain.SavedDiff, error) {
 
 func (c *appClient) delete(ctx context.Context, id string) error {
 	return c.do(ctx, http.MethodDelete, "/api/diffs/"+pathID(id), nil, nil)
+}
+
+func (c *appClient) settings(ctx context.Context) (*services.SettingsView, error) {
+	var v services.SettingsView
+	return &v, c.do(ctx, http.MethodGet, "/api/settings", nil, &v)
+}
+
+// saveSettingsBody carries an API key, so it is never logged or put in an error.
+type saveSettingsBody struct {
+	Provider     string `json:"provider"`
+	ReadingLevel string `json:"readingLevel"`
+	APIKey       string `json:"apiKey,omitempty"`
+}
+
+func (c *appClient) saveSettings(ctx context.Context, provider, level, key string) (*services.SettingsView, error) {
+	var v services.SettingsView
+	body := saveSettingsBody{Provider: provider, ReadingLevel: level, APIKey: key}
+	return &v, c.do(ctx, http.MethodPut, "/api/settings", body, &v)
+}
+
+func (c *appClient) clearKey(ctx context.Context, provider string) (*services.SettingsView, error) {
+	var v services.SettingsView
+	return &v, c.do(ctx, http.MethodDelete, "/api/settings/keys/"+pathID(provider), nil, &v)
 }
 
 // pathID keeps an ID from reaching another route; real IDs are letters and digits.

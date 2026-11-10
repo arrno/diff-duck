@@ -17,9 +17,10 @@ import (
 // appCLI runs the app commands against their own home directory, so they never touch the
 // user's saved diffs or a server the user is running.
 type appCLI struct {
-	t    *testing.T
-	home string
-	env  []string // added to the environment of every command, overriding what it names
+	t     *testing.T
+	home  string
+	env   []string // added to the environment of every command, overriding what it names
+	stdin string   // piped to the next command, then cleared
 }
 
 func newAppCLI(t *testing.T) *appCLI {
@@ -35,6 +36,10 @@ func (c *appCLI) run(args ...string) (int, string, string) {
 	cmd.Env = append(append(os.Environ(), c.env...), "DIFFDUCK_HOME="+c.home)
 	var stdout, stderr strings.Builder
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	if c.stdin != "" {
+		cmd.Stdin = strings.NewReader(c.stdin)
+		c.stdin = ""
+	}
 	err := cmd.Run()
 	code := 0
 	if exit, ok := err.(*exec.ExitError); ok {
