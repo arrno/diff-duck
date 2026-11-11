@@ -2,6 +2,7 @@ import { useRef, useState, type FormEvent } from "react";
 import { Popover } from "radix-ui";
 import { User } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { navIconClass } from "@/components/Navbar";
 import { BadRequestError, clearKey, getSettings, saveSettings, type Settings } from "@/lib/api";
 import { READING_LEVELS, type ProviderId } from "@/lib/model";
@@ -188,7 +189,7 @@ export function ProviderMenu() {
             )}
             {error && <p role="alert" className="text-sm break-words text-remove">{error}</p>}
             {notice && <p role="status" className="text-sm text-muted-foreground">{notice}</p>}
-            <Button type="submit" size="sm" className="w-full" disabled={!settings || busy}>{busy ? "Saving…" : "Save"}</Button>
+            <Button type="submit" size="sm" className="w-full" disabled={!settings || busy}>{busy ? <><Spinner />Saving…</> : "Save"}</Button>
           </form>
         </Popover.Content>
       </Popover.Portal>

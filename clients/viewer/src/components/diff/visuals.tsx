@@ -46,10 +46,10 @@ export function OpBadge({ op, className }: { op: ChangeOp; className?: string })
 }
 
 /** A round tinted icon. The surrounding text sets its color. */
-export function IconMark({ icon: Icon, soft }: { icon: LucideIcon; soft: string }) {
+export function IconMark({ icon: Icon, soft, spin = false }: { icon: LucideIcon; soft: string; spin?: boolean }) {
   return (
     <span className={cn("flex size-7 shrink-0 items-center justify-center rounded-full", soft)}>
-      <Icon aria-hidden className="size-4" strokeWidth={2.5} />
+      <Icon aria-hidden className={cn("size-4", spin && "animate-spin motion-reduce:animate-none")} strokeWidth={2.5} />
     </span>
   );
 }

@@ -5,6 +5,7 @@ import { createDiff, deleteDiff, getDiff, NotFoundError, type SavedDiff } from "
 import { elapsed, repositoryName, shortRef } from "@/lib/format";
 import { DeleteButton } from "./DeleteButton";
 import { diffHref, HOME, Page, usePageTitle } from "./Library";
+import { DiffBodySkeleton, DiffPageSkeleton, DiffShell } from "./DiffSkeleton";
 import { StatusMark } from "./StatusMark";
 
 const POLL_MS = 1000;
@@ -27,13 +28,19 @@ function Running({ diff, onDelete }: { diff: SavedDiff; onDelete: () => Promise<
     return () => window.clearInterval(timer);
   }, []);
   return (
-    <Page>
-      <StatusMark status="running" />
-      <h1 role="status" data-testid="stage" className="text-2xl font-semibold">{diff.stage ?? "Working"}…</h1>
-      <Summary diff={diff} />
-      <p className="text-sm text-muted-foreground">Running for {elapsed(diff.createdAt, now)}. You can leave this page, and it will keep going.</p>
-      <DeleteButton label="Stop and delete" onDelete={onDelete} />
-    </Page>
+    <DiffShell home={HOME}>
+      <div className="space-y-4">
+        <StatusMark status="running" />
+        <h1 className="text-2xl font-semibold"><span role="status" data-testid="stage">{diff.stage ?? "Working"}…</span></h1>
+        <Summary diff={diff} />
+        <p className="text-sm text-muted-foreground">Running for {elapsed(diff.createdAt, now)}. You can leave this page, and it will keep going.</p>
+        <DeleteButton label="Stop and delete" onDelete={onDelete} />
+      </div>
+      {/* A preview of where the diff will appear. */}
+      <div data-testid="diff-preview" className="border-t pt-8">
+        <DiffBodySkeleton />
+      </div>
+    </DiffShell>
   );
 }
 
@@ -109,7 +116,8 @@ export function DiffPage({ id }: { id: string }) {
 
   if (gone) return <Missing message={gone} />;
   if (diff === null) {
-    return <Page><p role={problem ? "alert" : "status"} className="text-muted-foreground">{problem ?? "Loading…"}</p></Page>;
+    if (problem) return <Page><p role="alert" className="text-muted-foreground">{problem}</p></Page>;
+    return <DiffPageSkeleton home={HOME} />;
   }
   if (diff.status === "running") return <Running diff={diff} onDelete={remove} />;
   if (diff.status === "failed" || !diff.result) return <Failed diff={diff} onDelete={remove} />;
