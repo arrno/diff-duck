@@ -307,6 +307,12 @@ test("packages follow their parent directory, and a long name never moves the ba
     "apps/portal/src/components/session-clock|session-clock",
     "apps/portal/src-utils|src-utils",
   ]);
+  // A JavaScript subfolder sits inside its folder, named by its path below it, and starts open.
+  const src = node(page, "apps/portal/src|src");
+  const clock = src.locator('li[data-node-id="apps/portal/src/components/session-clock|session-clock"]');
+  await expect(clock.getByTestId("package-name")).toHaveText("components/session-clock");
+  await expect(clock).toBeVisible();
+  await expect(node(page, "apps/portal/src-utils|src-utils").getByTestId("package-name").first()).toHaveText("src-utils");
   // The footer names the binary that wrote the page, not a placeholder.
   await expect(page.getByTestId("app-version")).toHaveText(/^(v\d+\.\d+\.\d+\S*|devel)$/);
 

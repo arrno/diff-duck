@@ -864,8 +864,8 @@ func addExcerpt(n *domain.Node, change domain.FileChange, hunk domain.Hunk, mark
 // finish sets rolled-up operations and stats, explains what needs no model, and orders the
 // tree so output is stable.
 func (b *treeBuilder) finish(packageExists func(domain.PackageRef, domain.ChangeOp) bool) {
+	// A package's operation comes from its own units, before subfolders join it.
 	for _, root := range b.roots {
-		domain.RollUpStats(root)
 		if root.Kind == domain.KindPackage {
 			root.Op = rollUpOp(root)
 			// A package exists or not independently of what changed inside it: adding one
@@ -875,20 +875,27 @@ func (b *treeBuilder) finish(packageExists func(domain.PackageRef, domain.Change
 					root.Op = domain.OpChange
 				}
 			}
-			if onlyRegions(root) {
-				text := "Only lines outside code units changed, such as imports, comments, or formatting."
-				if len(root.Children) == 1 {
-					text = root.Children[0].Summary.Text
-				}
-				root.Summary = domain.Summary{Origin: domain.OriginStructural, Text: text}
-			}
 		}
+	}
+	b.nestPackages()
+	for _, root := range b.roots {
+		domain.RollUpStats(root)
 		root.Walk(func(n *domain.Node) {
+			if n.Kind == domain.KindPackage && onlyRegions(n) {
+				text := "Only lines outside code units changed, such as imports, comments, or formatting."
+				if len(n.Children) == 1 {
+					text = n.Children[0].Summary.Text
+				}
+				n.Summary = domain.Summary{Origin: domain.OriginStructural, Text: text}
+			}
 			explainUnit(n)
 			sort.SliceStable(n.Children, func(i, j int) bool {
 				a, c := n.Children[i], n.Children[j]
 				if kindRank(a.Kind) != kindRank(c.Kind) {
 					return kindRank(a.Kind) < kindRank(c.Kind)
+				}
+				if a.Kind == domain.KindPackage {
+					return pathLess(a.Name, c.Name)
 				}
 				return a.Name < c.Name
 			})
@@ -918,6 +925,59 @@ func pathLess(a, b string) bool {
 		}
 	}
 	return len(x) < len(y)
+}
+
+// nestPackages moves each hierarchical package under the nearest hierarchical package whose
+// directory holds it, so a subfolder sits inside its folder instead of beside it. A folder
+// with no change of its own is skipped: "src/components/clock" joins "src" directly. The
+// repository root never takes children, which would put the whole tree under one node, and
+// packages that are not hierarchical, such as Go's, stay where they are.
+func (b *treeBuilder) nestPackages() {
+	byDir := map[string][]*domain.Node{}
+	for _, root := range b.roots {
+		if ref := b.refs[root.ID]; root.Kind == domain.KindPackage && ref.Hierarchical {
+			byDir[ref.Dir] = append(byDir[ref.Dir], root)
+		}
+	}
+	parentOf := func(dir string) *domain.Node {
+		for d := path.Dir(dir); d != "." && d != "/" && d != dir; dir, d = d, path.Dir(d) {
+			if candidates := byDir[d]; len(candidates) > 0 {
+				// Packages sharing a directory, such as two C# namespaces, take children in a
+				// stable order.
+				first := candidates[0]
+				for _, c := range candidates[1:] {
+					if c.ID < first.ID {
+						first = c
+					}
+				}
+				return first
+			}
+		}
+		return nil
+	}
+	parents := map[*domain.Node]*domain.Node{}
+	kept := b.roots[:0]
+	for _, root := range b.roots {
+		ref := b.refs[root.ID]
+		if root.Kind == domain.KindPackage && ref.Hierarchical {
+			if parent := parentOf(ref.Dir); parent != nil {
+				parent.Children = append(parent.Children, root)
+				parents[root] = parent
+				b.parents[root.ID] = parent
+				continue
+			}
+		}
+		kept = append(kept, root)
+	}
+	b.roots = kept
+	// A folder whose subfolders changed differently than its own units changed in mixed ways.
+	for child, parent := range parents {
+		for p := parent; p != nil && p.Op != domain.OpChange; p = parents[p] {
+			if child.Op != p.Op {
+				p.Op = domain.OpChange
+			}
+		}
+	}
 }
 
 func rollUpOp(pkg *domain.Node) domain.ChangeOp {
@@ -973,6 +1033,9 @@ func explainUnit(n *domain.Node) {
 
 func kindRank(k domain.UnitKind) int {
 	switch k {
+	case domain.KindPackage:
+		// Subfolders come first, as in a file explorer.
+		return -1
 	case domain.KindModule, domain.KindStruct, domain.KindInterface, domain.KindType,
 		domain.KindClass, domain.KindEnum, domain.KindTrait, domain.KindRecord:
 		return 0

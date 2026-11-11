@@ -79,10 +79,39 @@ export function packageLabel(node: DiffNode): string {
   return node.name.split("/").pop() ?? node.name;
 }
 
+/**
+ * The packages that hold an outcome's changes directly, at any depth: a folder appears when one
+ * of its own units belongs to the outcome, not merely because a subfolder's does.
+ */
 export function packagesOf(roots: DiffNode[], outcomeId: string): DiffNode[] {
-  const within = (n: DiffNode): boolean =>
-    (n.outcomes ?? []).includes(outcomeId) || (n.children ?? []).some(within);
-  return roots.filter(within);
+  const found: DiffNode[] = [];
+  const holds = (n: DiffNode): boolean =>
+    (n.outcomes ?? []).includes(outcomeId) || (n.children ?? []).some((c) => c.kind !== "PACKAGE" && holds(c));
+  const visit = (n: DiffNode) => {
+    if (n.kind === "PACKAGE" && holds(n)) found.push(n);
+    (n.children ?? []).forEach(visit);
+  };
+  roots.forEach(visit);
+  return found;
+}
+
+/** Every package in the tree, nested ones included, parents first. */
+export function allPackages(roots: DiffNode[]): DiffNode[] {
+  const found: DiffNode[] = [];
+  const visit = (n: DiffNode) => {
+    if (n.kind === "PACKAGE") found.push(n);
+    (n.children ?? []).forEach(visit);
+  };
+  roots.forEach(visit);
+  return found;
+}
+
+/**
+ * What a package row is called: inside another package, its path below that one, such as
+ * "components/session-clock"; otherwise its own label.
+ */
+export function packageTitle(node: DiffNode, parent?: string): string {
+  return parent && node.name.startsWith(`${parent}/`) ? node.name.slice(parent.length + 1) : packageLabel(node);
 }
 
 /** Largest change first, so the most significant package leads. */

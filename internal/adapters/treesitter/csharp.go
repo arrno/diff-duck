@@ -115,7 +115,7 @@ func (e *csExtractor) pkgOf(ns string) domain.PackageRef {
 	if ns == "" {
 		return e.pkg
 	}
-	return domain.PackageRef{Dir: e.pkg.Dir, Name: ns}
+	return domain.PackageRef{Dir: e.pkg.Dir, Name: ns, Hierarchical: e.pkg.Hierarchical}
 }
 
 func (e *csExtractor) unit(u domain.Unit, ns string, n Node) domain.Unit {

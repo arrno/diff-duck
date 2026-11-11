@@ -292,3 +292,87 @@ func TestPackagesSortBySubdirectoryFirst(t *testing.T) {
 		}
 	}
 }
+
+// nestingTree builds a finished tree from one changed function per package.
+func nestingTree(t *testing.T, refs ...domain.PackageRef) []*domain.Node {
+	t.Helper()
+	b := &treeBuilder{nodes: map[string]*domain.Node{}, packages: map[string]*domain.Node{}, parents: map[string]*domain.Node{}, refs: map[string]domain.PackageRef{}}
+	for i, ref := range refs {
+		pkg := b.packageNode(ref)
+		fn := &domain.Node{ID: ref.Key() + "::f", Kind: domain.KindFunction, Name: "f", Op: domain.OpChange, Direct: true,
+			Diff: []domain.FileDiff{{NewPath: ref.Dir + "/f.x", Lines: []domain.DiffLine{{Kind: domain.LineAdded, NewLine: i + 1}}}}}
+		pkg.Children = append(pkg.Children, fn)
+	}
+	b.finish(func(domain.PackageRef, domain.ChangeOp) bool { return true })
+	return b.roots
+}
+
+func shape(nodes []*domain.Node) string {
+	var parts []string
+	for _, n := range nodes {
+		if n.Kind != domain.KindPackage {
+			continue
+		}
+		if inner := shape(n.Children); inner != "" {
+			parts = append(parts, n.Name+"("+inner+")")
+		} else {
+			parts = append(parts, n.Name)
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
+func TestHierarchicalPackagesNestUnderTheNearestChangedFolder(t *testing.T) {
+	js := func(dir string) domain.PackageRef {
+		return domain.PackageRef{Dir: dir, Name: dir[strings.LastIndex(dir, "/")+1:], Hierarchical: true}
+	}
+	roots := nestingTree(t,
+		js("apps/portal/src/components/session-clock"), js("apps/portal/src"), js("apps/portal/src-utils"),
+		js("apps/portal/src/lib"), domain.PackageRef{Dir: ".", Hierarchical: true}, js("tools"))
+	// src/components did not change, so session-clock joins src directly; the root never takes
+	// children; src-utils is not inside src.
+	want := ". apps/portal/src(apps/portal/src/components/session-clock apps/portal/src/lib) apps/portal/src-utils tools"
+	if got := shape(roots); got != want {
+		t.Fatalf("tree:\n got %s\nwant %s", got, want)
+	}
+	src := roots[1]
+	if src.Added != 3 {
+		t.Errorf("a folder's lines include its subfolders': +%d", src.Added)
+	}
+	if src.Children[0].Kind != domain.KindPackage {
+		t.Errorf("subfolders come first, as in a file explorer: %s", src.Children[0].Name)
+	}
+}
+
+// Go packages are independent of the directory above them, so a Go tree keeps every package at
+// the top, and a Go package never joins a folder of another language.
+func TestGoPackagesNeverNest(t *testing.T) {
+	gopkg := func(dir string) domain.PackageRef {
+		return domain.PackageRef{Dir: dir, Name: dir[strings.LastIndex(dir, "/")+1:]}
+	}
+	roots := nestingTree(t, gopkg("internal/services"), gopkg("internal/services/ports"),
+		domain.PackageRef{Dir: "web", Name: "web", Hierarchical: true}, gopkg("web/server"))
+	if got, want := shape(roots), "internal/services internal/services/ports web web/server"; got != want {
+		t.Fatalf("tree:\n got %s\nwant %s", got, want)
+	}
+}
+
+func TestAFolderChangedDifferentlyFromItsSubfolderIsAChange(t *testing.T) {
+	b := &treeBuilder{nodes: map[string]*domain.Node{}, packages: map[string]*domain.Node{}, parents: map[string]*domain.Node{}, refs: map[string]domain.PackageRef{}}
+	add := func(dir string, op domain.ChangeOp) {
+		pkg := b.packageNode(domain.PackageRef{Dir: dir, Name: dir, Hierarchical: true})
+		pkg.Children = append(pkg.Children, &domain.Node{ID: dir + "::f", Kind: domain.KindFunction, Name: "f", Op: op, Direct: true})
+	}
+	add("src", domain.OpAdd)
+	add("src/new", domain.OpAdd)
+	add("lib", domain.OpAdd)
+	add("lib/old", domain.OpRemove)
+	b.finish(func(domain.PackageRef, domain.ChangeOp) bool { return false })
+	ops := map[string]domain.ChangeOp{}
+	for _, r := range b.roots {
+		ops[r.Name] = r.Op
+	}
+	if ops["src"] != domain.OpAdd || ops["lib"] != domain.OpChange {
+		t.Fatalf("ops: %v", ops)
+	}
+}

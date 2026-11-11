@@ -102,7 +102,7 @@ module.exports.extra = function () {};
 
 func TestJavaScriptUnitsNamesKindsNestingAndLines(t *testing.T) {
 	a := analyzeJS(t, newTestRuntime(t), "web/shop/cart.js", jsSample)
-	if a.Package != (domain.PackageRef{Dir: "web/shop", Name: "shop"}) || a.Test || a.Generated {
+	if a.Package != (domain.PackageRef{Dir: "web/shop", Name: "shop", Hierarchical: true}) || a.Test || a.Generated {
 		t.Errorf("package %+v test=%v generated=%v", a.Package, a.Test, a.Generated)
 	}
 	checkJSUnits(t, a, "web/shop/cart.js", map[string]jsWant{
@@ -516,13 +516,13 @@ func TestJSPackageAndModuleNaming(t *testing.T) {
 		pkg    domain.PackageRef
 		module string
 	}{
-		"index.js":              {domain.PackageRef{Dir: ".", Name: ""}, "index"},
-		"src/types/index.d.ts":  {domain.PackageRef{Dir: "src/types", Name: "types"}, "index.d"},
-		"src/Button.test.tsx":   {domain.PackageRef{Dir: "src", Name: "src"}, "Button.test"},
-		"lib/config.mjs":        {domain.PackageRef{Dir: "lib", Name: "lib"}, "config"},
-		"lib/legacy.cjs":        {domain.PackageRef{Dir: "lib", Name: "lib"}, "legacy"},
-		"lib/node/esm.mts":      {domain.PackageRef{Dir: "lib/node", Name: "node"}, "esm"},
-		"lib/node/commonjs.cts": {domain.PackageRef{Dir: "lib/node", Name: "node"}, "commonjs"},
+		"index.js":              {domain.PackageRef{Dir: ".", Name: "", Hierarchical: true}, "index"},
+		"src/types/index.d.ts":  {domain.PackageRef{Dir: "src/types", Name: "types", Hierarchical: true}, "index.d"},
+		"src/Button.test.tsx":   {domain.PackageRef{Dir: "src", Name: "src", Hierarchical: true}, "Button.test"},
+		"lib/config.mjs":        {domain.PackageRef{Dir: "lib", Name: "lib", Hierarchical: true}, "config"},
+		"lib/legacy.cjs":        {domain.PackageRef{Dir: "lib", Name: "lib", Hierarchical: true}, "legacy"},
+		"lib/node/esm.mts":      {domain.PackageRef{Dir: "lib/node", Name: "node", Hierarchical: true}, "esm"},
+		"lib/node/commonjs.cts": {domain.PackageRef{Dir: "lib/node", Name: "node", Hierarchical: true}, "commonjs"},
 	} {
 		a := analyzeJS(t, rt, p, "export function f() {}\n")
 		if a.Package != want.pkg || a.Units[0].Name != want.module || a.Units[0].Kind != domain.KindModule ||

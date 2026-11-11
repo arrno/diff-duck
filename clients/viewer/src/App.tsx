@@ -9,7 +9,7 @@ import { UnitList } from "@/components/diff/Unit";
 import { ViewContext, type ViewState } from "@/components/diff/ViewState";
 import { providerLabel, readingLevelLabel, type CompressedDiff } from "@/lib/model";
 import { assignPackageColors } from "@/lib/packageColor";
-import { allParents, ancestorsOfMatches, byPath, countMatches, isVisible, packageLabel, type Filter } from "@/lib/tree";
+import { allPackages, allParents, ancestorsOfMatches, byPath, countMatches, isVisible, packageLabel, type Filter } from "@/lib/tree";
 
 function toggled(set: Set<string>, id: string): Set<string> {
   const next = new Set(set);
@@ -27,13 +27,15 @@ export function App({ model, home, actions }: { model: CompressedDiff; home?: st
     document.title = `${repository}: ${model.base} → ${model.head} · DiffDuck`;
   }, [model]);
   const [filter, setFilter] = useState<Filter>({ kind: "all" });
-  // Packages start open: opening a card only to reach more cards is a wasted click.
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set(packages.map((n) => n.id)));
+  // Packages, nested ones too, start open: opening a folder only to reach more folders is a
+  // wasted click.
+  const everyPackage = useMemo(() => allPackages(model.nodes), [model]);
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set(everyPackage.map((n) => n.id)));
   const [savedExpanded, setSavedExpanded] = useState<Set<string>>(expanded);
   const [source, setSource] = useState<Set<string>>(new Set());
 
   const unassigned = useMemo(() => new Set(model.unassigned ?? []), [model]);
-  const colors = useMemo(() => assignPackageColors(packages.map(packageLabel)), [packages]);
+  const colors = useMemo(() => assignPackageColors(everyPackage.map(packageLabel)), [everyPackage]);
 
   const applyFilter = useCallback((next: Filter) => {
     if (filter.kind === "all") setSavedExpanded(expanded);

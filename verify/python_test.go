@@ -102,8 +102,8 @@ func TestPythonChangesBecomeCodeUnits(t *testing.T) {
 		"models.User.Meta":       {domain.KindClass, domain.OpChange, "app > models > models.User > models.User.Meta", 16, 18, false},
 		"models.User.Meta.table": {domain.KindMethod, domain.OpChange, "app > models > models.User > models.User.Meta > models.User.Meta.table", 17, 18, true},
 		"models.fetch_user":      {domain.KindFunction, domain.OpAdd, "app > models > models.fetch_user", 26, 28, true},
-		"test_x":                 {domain.KindModule, domain.OpAdd, "app/tests > test_x", 1, 2, true},
-		"test_x.test_x":          {domain.KindFunction, domain.OpAdd, "app/tests > test_x > test_x.test_x", 1, 2, true},
+		"test_x":                 {domain.KindModule, domain.OpAdd, "app > app/tests > test_x", 1, 2, true},
+		"test_x.test_x":          {domain.KindFunction, domain.OpAdd, "app > app/tests > test_x > test_x.test_x", 1, 2, true},
 	}
 	for name, w := range wants {
 		nodes := allNamed(r, name)

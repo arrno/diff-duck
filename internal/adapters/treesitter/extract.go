@@ -29,13 +29,14 @@ func parseClean(ctx context.Context, rt *Runtime, g Grammar, p string, src []byt
 }
 
 // dirPackage is the package of a language whose packages are directories: the file's
-// directory, named by its last element, or unnamed at the repository root.
+// directory, named by its last element, or unnamed at the repository root. Every language
+// parsed here nests its folders, so its packages are hierarchical.
 func dirPackage(p string) domain.PackageRef {
 	dir := path.Dir(p)
 	if dir == "." {
-		return domain.PackageRef{Dir: dir}
+		return domain.PackageRef{Dir: dir, Hierarchical: true}
 	}
-	return domain.PackageRef{Dir: dir, Name: path.Base(dir)}
+	return domain.PackageRef{Dir: dir, Name: path.Base(dir), Hierarchical: true}
 }
 
 // fileUnits collects one file's units, in source order, and stamps each with what every unit

@@ -5,7 +5,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { DiffNode } from "@/lib/model";
 import { packageStyle } from "@/lib/packageColor";
-import { abbreviate, descendantCount, isVisible, matches, packageLabel } from "@/lib/tree";
+import { abbreviate, descendantCount, isVisible, matches, packageLabel, packageTitle } from "@/lib/tree";
 import { cn } from "@/lib/utils";
 import { SourceDiff } from "./SourceDiff";
 import { useView } from "./ViewState";
@@ -173,12 +173,14 @@ function LeafRow({ node }: { node: DiffNode }) {
 }
 
 /** Any unit that contains others, from a package down: one row of a file tree, with no box. */
-function GroupRow({ node, colors }: { node: DiffNode; colors: Map<string, number> }) {
+function GroupRow({ node, colors, parent }: { node: DiffNode; colors: Map<string, number>; parent?: string }) {
   const { expanded, toggle, filter, unassigned } = useView();
   const open = expanded.has(node.id);
   const children = (node.children ?? []).filter((c) => isVisible(c, filter, unassigned));
   const isPackage = node.kind === "PACKAGE";
+  // The color follows the folder's own name, so it matches wherever the folder appears.
   const label = isPackage ? packageLabel(node) : "";
+  const title = isPackage ? packageTitle(node, parent) : "";
   return (
     <li data-node-id={node.id} className="py-1">
       <Collapsible open={open} onOpenChange={() => toggle(node.id)}>
@@ -195,11 +197,11 @@ function GroupRow({ node, colors }: { node: DiffNode; colors: Map<string, number
           </Lead>
           <span className={rest}>
             {isPackage ? (
-              <span data-testid="package-name" className="min-w-0 text-lg font-semibold [overflow-wrap:anywhere] [color:var(--pkg)]">{label}</span>
+              <span data-testid="package-name" className="min-w-0 text-lg font-semibold [overflow-wrap:anywhere] [color:var(--pkg)]">{title}</span>
             ) : (
               <Name name={node.summary.semanticName || node.name} className="py-0.5 text-base font-semibold" />
             )}
-            {isPackage && node.name !== label && <Name name={node.name} className="text-xs text-muted-foreground" />}
+            {isPackage && node.name !== title && <Name name={node.name} className="text-xs text-muted-foreground" />}
             <IdentityTags node={node} />
             <span data-testid="descendants" className="text-xs text-muted-foreground">{descendantCount(node, filter, unassigned)} inside</span>
             <span className="ml-auto"><LineStats added={node.added} removed={node.removed} /></span>
@@ -213,7 +215,7 @@ function GroupRow({ node, colors }: { node: DiffNode; colors: Map<string, number
           <Details node={node} />
         </div>
         <CollapsibleContent>
-          <UnitList nodes={children} colors={colors} className="mt-1 ml-3.5 border-l-2 pl-3" />
+          <UnitList nodes={children} colors={colors} parent={isPackage ? node.name : parent} className="mt-1 ml-3.5 border-l-2 pl-3" />
         </CollapsibleContent>
       </Collapsible>
     </li>
@@ -242,7 +244,8 @@ function isCompact(node: DiffNode): boolean {
     ((node.kind === "STRUCT" || node.kind === "INTERFACE" || node.kind === "TYPE") && node.summary.origin === "structural" && !node.summary.text);
 }
 
-export function UnitList({ nodes, colors, className }: { nodes: DiffNode[]; colors: Map<string, number>; className?: string }) {
+/** `parent` is the path of the package these nodes sit in, which names nested packages. */
+export function UnitList({ nodes, colors, parent, className }: { nodes: DiffNode[]; colors: Map<string, number>; parent?: string; className?: string }) {
   const { filter, unassigned } = useView();
   return (
     <ul className={className}>
@@ -250,7 +253,7 @@ export function UnitList({ nodes, colors, className }: { nodes: DiffNode[]; colo
         // Ancestors stay for context, and non-matching leaves leave the view.
         if (filter.kind !== "all" && !matches(node, filter, unassigned) && !(node.children ?? []).length) return null;
         if (node.kind === "REGION") return <RegionRow key={node.id} node={node} />;
-        if ((node.children ?? []).length > 0) return <GroupRow key={node.id} node={node} colors={colors} />;
+        if ((node.children ?? []).length > 0) return <GroupRow key={node.id} node={node} colors={colors} parent={parent} />;
         return isCompact(node) ? <CompactRow key={node.id} node={node} /> : <LeafRow key={node.id} node={node} />;
       })}
     </ul>

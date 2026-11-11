@@ -61,6 +61,11 @@ func (f FileChange) Path() string {
 type PackageRef struct {
 	Dir  string
 	Name string
+	// Hierarchical is true when the language's folders form a hierarchy, so a package in a
+	// subdirectory belongs to the package above it, as in JavaScript, Python, Rust, C#, and
+	// Java. A Go package is independent of the directory above it, so Go leaves it false.
+	// It is not part of the package's identity.
+	Hierarchical bool
 }
 
 // Key returns the package identity used to match it across revisions.

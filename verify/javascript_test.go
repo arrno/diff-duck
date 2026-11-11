@@ -129,8 +129,8 @@ func TestJavaScriptAndTypeScriptChangesBecomeCodeUnits(t *testing.T) {
 		"types.Id":          {domain.KindType, domain.OpAdd, "web > types > types.Id", 12, 12, true},
 		"App":               {domain.KindModule, domain.OpAdd, "web > App", 1, 5, true},
 		"App.App":           {domain.KindFunction, domain.OpAdd, "web > App > App.App", 3, 5, true},
-		"cart.test":         {domain.KindModule, domain.OpAdd, "web/__tests__ > cart.test", 1, 4, true},
-		"cart.test.fixture": {domain.KindVar, domain.OpAdd, "web/__tests__ > cart.test > cart.test.fixture", 4, 4, true},
+		"cart.test":         {domain.KindModule, domain.OpAdd, "web > web/__tests__ > cart.test", 1, 4, true},
+		"cart.test.fixture": {domain.KindVar, domain.OpAdd, "web > web/__tests__ > cart.test > cart.test.fixture", 4, 4, true},
 	}
 	for name, w := range wants {
 		nodes := allNamed(r, name)
