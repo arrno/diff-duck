@@ -14,11 +14,11 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/arrno/diff-duck/internal/adapters/gitrepo"
-	"github.com/arrno/diff-duck/internal/adapters/sqlitestore"
-	"github.com/arrno/diff-duck/internal/controller/htmlview"
-	"github.com/arrno/diff-duck/internal/controller/server"
-	"github.com/arrno/diff-duck/internal/services"
+	"github.com/arrno/diffduck/internal/adapters/gitrepo"
+	"github.com/arrno/diffduck/internal/adapters/sqlitestore"
+	"github.com/arrno/diffduck/internal/controller/htmlview"
+	"github.com/arrno/diffduck/internal/controller/server"
+	"github.com/arrno/diffduck/internal/services"
 )
 
 const defaultPort = 7474
@@ -53,7 +53,7 @@ func serveFlags(opts *serveOptions, stderr io.Writer, name string) *flag.FlagSet
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.IntVar(&opts.port, "port", defaultPort, "port on the loopback address; 0 picks a free one")
-	fs.StringVar(&opts.dbPath, "db", "", "database file (default: diffs.db in $"+homeEnv+", or diff-duck in the user config directory)")
+	fs.StringVar(&opts.dbPath, "db", "", "database file (default: diffs.db in $"+homeEnv+", or diffduck in the user config directory)")
 	fs.BoolVar(&opts.noOpen, "no-open", false, "do not open a browser")
 	addModelFlags(fs, &opts.options)
 	return fs
@@ -168,7 +168,7 @@ func serve(ctx context.Context, opts serveOptions, stdout io.Writer) error {
 		}
 		defer removeRecord(dir, pid)
 	}
-	fmt.Fprintf(stdout, "DiffDuck is running at %s\nSaved diffs: %s\nPress Ctrl+C to stop.\n", url, printable(dbPath))
+	fmt.Fprintf(stdout, "diffduck is running at %s\nSaved diffs: %s\nPress Ctrl+C to stop.\n", url, printable(dbPath))
 	if !opts.noOpen {
 		openBrowser(url)
 	}

@@ -7,9 +7,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/arrno/diff-duck/internal/adapters/keyring"
-	"github.com/arrno/diff-duck/internal/adapters/scriptedmodel"
-	"github.com/arrno/diff-duck/internal/services/ports"
+	"github.com/arrno/diffduck/internal/adapters/keyring"
+	"github.com/arrno/diffduck/internal/adapters/scriptedmodel"
+	"github.com/arrno/diffduck/internal/services/ports"
 	gokeyring "github.com/zalando/go-keyring"
 )
 

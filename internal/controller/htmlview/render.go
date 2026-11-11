@@ -9,15 +9,15 @@ import (
 	"html"
 	"strings"
 
-	"github.com/arrno/diff-duck/internal/domain"
+	"github.com/arrno/diffduck/internal/domain"
 )
 
 //go:embed viewer.html
 var page string
 
 const (
-	modelPlaceholder   = "__DIFF_DUCK_MODEL__"
-	versionPlaceholder = "__DIFF_DUCK_VERSION__"
+	modelPlaceholder   = "__DIFFDUCK_MODEL__"
+	versionPlaceholder = "__DIFFDUCK_VERSION__"
 )
 
 // Render returns the viewer page holding the compressed diff. Go's JSON encoder escapes "<",

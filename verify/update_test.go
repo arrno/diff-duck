@@ -64,7 +64,7 @@ func TestUpdate(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("update exited %d: %s%s", code, stdout, stderr)
 	}
-	if got, _ := os.ReadFile(request); strings.TrimSpace(string(got)) != "github.com/arrno/diff-duck/cmd/diffduck@latest" {
+	if got, _ := os.ReadFile(request); strings.TrimSpace(string(got)) != "github.com/arrno/diffduck/cmd/diffduck@latest" {
 		t.Fatalf("installed %q", got)
 	}
 	if !strings.Contains(stdout, installed) || !strings.Contains(stdout, "running again") {
@@ -96,7 +96,7 @@ func TestUpdate(t *testing.T) {
 	}
 
 	c.must("update", "v1.2.3")
-	if got, _ := os.ReadFile(request); strings.TrimSpace(string(got)) != "github.com/arrno/diff-duck/cmd/diffduck@v1.2.3" {
+	if got, _ := os.ReadFile(request); strings.TrimSpace(string(got)) != "github.com/arrno/diffduck/cmd/diffduck@v1.2.3" {
 		t.Fatalf("installed %q", got)
 	}
 

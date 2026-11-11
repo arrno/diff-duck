@@ -5,7 +5,7 @@ package keyring
 import (
 	"testing"
 
-	"github.com/arrno/diff-duck/internal/domain"
+	"github.com/arrno/diffduck/internal/domain"
 )
 
 const secret = "sk-test-0123456789abcdef"

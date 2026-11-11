@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/arrno/diff-duck/internal/services/ports"
+	"github.com/arrno/diffduck/internal/services/ports"
 )
 
 // Behavior selects what the model does.

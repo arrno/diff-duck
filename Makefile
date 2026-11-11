@@ -8,7 +8,7 @@ viewer:
 # Live-reloads the UI. Against a saved run: make viewer-dev DIFF=path/to/compressed-diff.json
 # Or against the app, with `diffduck serve --no-open` running: make viewer-dev
 viewer-dev:
-	cd clients/viewer && DIFF_DUCK_JSON="$(if $(DIFF),$(abspath $(DIFF)))" npm run dev
+	cd clients/viewer && DIFFDUCK_JSON="$(if $(DIFF),$(abspath $(DIFF)))" npm run dev
 test:
 	go test -count=1 ./...
 verify: build

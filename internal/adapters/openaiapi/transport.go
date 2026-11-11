@@ -116,7 +116,7 @@ func (c *client) attempt(ctx context.Context, payload []byte, out *wireResponse)
 	req.Header.Set("Authorization", "Bearer "+c.key)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "diff-duck")
+	req.Header.Set("User-Agent", "diffduck")
 
 	resp, err := c.http.Do(req)
 	if err != nil {

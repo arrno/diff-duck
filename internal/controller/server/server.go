@@ -20,9 +20,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/arrno/diff-duck/internal/adapters/gitrepo"
-	"github.com/arrno/diff-duck/internal/services"
-	"github.com/arrno/diff-duck/internal/services/ports"
+	"github.com/arrno/diffduck/internal/adapters/gitrepo"
+	"github.com/arrno/diffduck/internal/services"
+	"github.com/arrno/diffduck/internal/services/ports"
 )
 
 const (

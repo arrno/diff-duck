@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/arrno/diff-duck/internal/domain"
+	"github.com/arrno/diffduck/internal/domain"
 )
 
 func analyzeCs(t *testing.T, rt *Runtime, p, src string) domain.FileAnalysis {

@@ -1,4 +1,4 @@
-// DiffDuck tree-sitter shim, compiled together with the tree-sitter core and ONE grammar into
+// diffduck tree-sitter shim, compiled together with the tree-sitter core and ONE grammar into
 // a wasm32-wasi reactor module (see scripts/build-treesitter-wasm.sh).
 //
 // It is language agnostic: the build passes -DTS_LANGUAGE=tree_sitter_<lang>, so adding a

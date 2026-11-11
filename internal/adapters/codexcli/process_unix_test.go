@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/arrno/diff-duck/internal/services/ports"
+	"github.com/arrno/diffduck/internal/services/ports"
 )
 
 func TestEachRequestGetsItsOwnInstructionsAndSchema(t *testing.T) {

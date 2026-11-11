@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/arrno/diff-duck/internal/adapters/sqlitestore"
+	"github.com/arrno/diffduck/internal/adapters/sqlitestore"
 )
 
 const (
@@ -32,14 +32,14 @@ func runUp(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return fail(stderr, err)
 	}
 	if r, _ := findServer(ctx, dir); r != nil {
-		fmt.Fprintf(stdout, "DiffDuck is already running at %s\n", r.url())
+		fmt.Fprintf(stdout, "diffduck is already running at %s\n", r.url())
 		return exitOK
 	}
 	r, err := startServer(ctx, dir, args)
 	if err != nil {
 		return fail(stderr, err)
 	}
-	fmt.Fprintf(stdout, "DiffDuck is running at %s\nStop it with: diffduck down\n", r.url())
+	fmt.Fprintf(stdout, "diffduck is running at %s\nStop it with: diffduck down\n", r.url())
 	return exitOK
 }
 
@@ -58,13 +58,13 @@ func runDown(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return fail(stderr, err)
 	}
 	if r == nil {
-		fmt.Fprintln(stdout, "DiffDuck is not running.")
+		fmt.Fprintln(stdout, "diffduck is not running.")
 		return exitOK
 	}
 	if err := stopServer(dir, r); err != nil {
 		return fail(stderr, err)
 	}
-	fmt.Fprintln(stdout, "DiffDuck stopped.")
+	fmt.Fprintln(stdout, "diffduck stopped.")
 	return exitOK
 }
 
@@ -83,10 +83,10 @@ func runStatus(ctx context.Context, args []string, stdout, stderr io.Writer) int
 		return fail(stderr, err)
 	}
 	if r == nil {
-		fmt.Fprintln(stdout, "DiffDuck is not running. Start it with: diffduck up")
+		fmt.Fprintln(stdout, "diffduck is not running. Start it with: diffduck up")
 		return exitFailure
 	}
-	fmt.Fprintf(stdout, "DiffDuck is running at %s\nSaved diffs: %s\n", r.url(), printable(r.DB))
+	fmt.Fprintf(stdout, "diffduck is running at %s\nSaved diffs: %s\n", r.url(), printable(r.DB))
 	return exitOK
 }
 
@@ -142,7 +142,7 @@ func runReset(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 		if err != nil {
 			return fail(stderr, errors.Join(cleared, err))
 		}
-		fmt.Fprintf(stdout, "DiffDuck is running again at %s\n", restarted.url())
+		fmt.Fprintf(stdout, "diffduck is running again at %s\n", restarted.url())
 	}
 	if cleared != nil {
 		return fail(stderr, cleared)
@@ -172,7 +172,7 @@ func ensureServer(ctx context.Context, dir string, stderr io.Writer) (*serverRec
 	if err != nil {
 		return nil, err
 	}
-	fmt.Fprintf(stderr, "Started DiffDuck at %s (stop it with: diffduck down)\n", r.url())
+	fmt.Fprintf(stderr, "Started diffduck at %s (stop it with: diffduck down)\n", r.url())
 	return r, nil
 }
 
@@ -198,7 +198,7 @@ func launchServer(ctx context.Context, exe, dir string, args []string) (*serverR
 	cmd.Env = append(os.Environ(), homeEnv+"="+dir)
 	detach(cmd)
 	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("start DiffDuck: %w", err)
+		return nil, fmt.Errorf("start diffduck: %w", err)
 	}
 	exited := make(chan struct{})
 	go func() { _ = cmd.Wait(); close(exited) }()
@@ -209,10 +209,10 @@ func launchServer(ctx context.Context, exe, dir string, args []string) (*serverR
 	for {
 		select {
 		case <-exited:
-			return nil, fmt.Errorf("DiffDuck did not start:\n%s", logTail(dir))
+			return nil, fmt.Errorf("diffduck did not start:\n%s", logTail(dir))
 		case <-deadline:
 			_ = cmd.Process.Kill()
-			return nil, fmt.Errorf("DiffDuck did not start within %s:\n%s", startTimeout, logTail(dir))
+			return nil, fmt.Errorf("diffduck did not start within %s:\n%s", startTimeout, logTail(dir))
 		case <-ctx.Done():
 			_ = cmd.Process.Kill()
 			return nil, ctx.Err()
@@ -231,11 +231,11 @@ func stopServer(dir string, r *serverRecord) error {
 		return err
 	}
 	if err := stopProcess(p); err != nil {
-		return fmt.Errorf("stop DiffDuck (pid %d): %w", r.PID, err)
+		return fmt.Errorf("stop diffduck (pid %d): %w", r.PID, err)
 	}
 	for deadline := time.Now().Add(stopTimeout); alive(p); {
 		if time.Now().After(deadline) {
-			return fmt.Errorf("DiffDuck (pid %d) did not stop within %s", r.PID, stopTimeout)
+			return fmt.Errorf("diffduck (pid %d) did not stop within %s", r.PID, stopTimeout)
 		}
 		time.Sleep(50 * time.Millisecond)
 	}

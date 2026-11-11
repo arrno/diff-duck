@@ -7,13 +7,13 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/arrno/diff-duck/internal/adapters/anthropicapi"
-	"github.com/arrno/diff-duck/internal/adapters/claudecli"
-	"github.com/arrno/diff-duck/internal/adapters/codexcli"
-	"github.com/arrno/diff-duck/internal/adapters/modelcache"
-	"github.com/arrno/diff-duck/internal/adapters/openaiapi"
-	"github.com/arrno/diff-duck/internal/domain"
-	"github.com/arrno/diff-duck/internal/services/ports"
+	"github.com/arrno/diffduck/internal/adapters/anthropicapi"
+	"github.com/arrno/diffduck/internal/adapters/claudecli"
+	"github.com/arrno/diffduck/internal/adapters/codexcli"
+	"github.com/arrno/diffduck/internal/adapters/modelcache"
+	"github.com/arrno/diffduck/internal/adapters/openaiapi"
+	"github.com/arrno/diffduck/internal/domain"
+	"github.com/arrno/diffduck/internal/services/ports"
 )
 
 // Adapters --adapter accepts in every build. Verification builds also accept scripted:<behavior>.
@@ -216,7 +216,12 @@ func withCache(opts options, opened ports.OpenedModel) (ports.OpenedModel, error
 			opened.Close()
 			return ports.OpenedModel{}, fmt.Errorf("locate cache directory (use --cache-dir or --no-cache): %w", err)
 		}
-		dir = filepath.Join(base, "diff-duck", "responses")
+		own, err := ownDir(base)
+		if err != nil {
+			opened.Close()
+			return ports.OpenedModel{}, err
+		}
+		dir = filepath.Join(own, "responses")
 	}
 	cached, err := modelcache.New(opened.Model, dir)
 	if err != nil {

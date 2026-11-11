@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/arrno/diff-duck/internal/domain"
-	"github.com/arrno/diff-duck/internal/services/ports"
+	"github.com/arrno/diffduck/internal/domain"
+	"github.com/arrno/diffduck/internal/services/ports"
 )
 
 var (
@@ -25,7 +25,7 @@ const (
 	// One at a time, because each run can make many model calls.
 	concurrentDiffs = 1
 	maxQueuedDiffs  = 8
-	stoppedMessage  = "DiffDuck stopped before this diff finished."
+	stoppedMessage  = "diffduck stopped before this diff finished."
 )
 
 // LibraryDeps are what a DiffLibrary needs from the outside world.

@@ -7,7 +7,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/arrno/diff-duck/internal/domain"
+	"github.com/arrno/diffduck/internal/domain"
 )
 
 // RepositoryReader reads a repository's history. Implementations must treat revisions and

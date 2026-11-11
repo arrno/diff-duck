@@ -1,5 +1,5 @@
 bin/
-diff-duck-out/
+diffduck-out/
 node_modules/
 verify/.work/
 verify/test-results/

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/arrno/diff-duck/internal/services"
+	"github.com/arrno/diffduck/internal/services"
 )
 
 const settingsUsage = `Usage:

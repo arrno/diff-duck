@@ -16,12 +16,12 @@ import (
 	"strings"
 )
 
-const installPath = "github.com/arrno/diff-duck/cmd/diffduck"
+const installPath = "github.com/arrno/diffduck/cmd/diffduck"
 
 const updateUsage = `Usage:
   diffduck update [version]
 
-Installs DiffDuck with go install, then restarts the app if it is running so it runs the new
+Installs diffduck with go install, then restarts the app if it is running so it runs the new
 binary. Saved diffs, settings, and API keys are kept. version is latest (the default, meaning
 the newest release tag), main (the newest commit), a release tag such as v1.2.0, or a commit.
 Needs the Go toolchain on PATH.
@@ -117,7 +117,7 @@ func runUpdate(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	if err != nil {
 		return fail(stderr, err)
 	}
-	fmt.Fprintf(stdout, "DiffDuck is running again at %s\n", restarted.url())
+	fmt.Fprintf(stdout, "diffduck is running again at %s\n", restarted.url())
 	return exitOK
 }
 

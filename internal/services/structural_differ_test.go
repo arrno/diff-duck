@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/arrno/diff-duck/internal/domain"
+	"github.com/arrno/diffduck/internal/domain"
 )
 
 // scriptedAnalyzer returns fixed analyses by revision and path, standing in for any language.

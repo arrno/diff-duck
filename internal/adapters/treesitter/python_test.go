@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/arrno/diff-duck/internal/domain"
+	"github.com/arrno/diffduck/internal/domain"
 )
 
 func newTestRuntime(t *testing.T) *Runtime {

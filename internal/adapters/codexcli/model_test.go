@@ -14,7 +14,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/arrno/diff-duck/internal/services/ports"
+	"github.com/arrno/diffduck/internal/services/ports"
 )
 
 const okStream = `{"type":"thread.started","thread_id":"t"}

@@ -14,15 +14,15 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/arrno/diff-duck/internal/adapters/gitrepo"
-	"github.com/arrno/diff-duck/internal/adapters/promptfiles"
-	"github.com/arrno/diff-duck/internal/controller/htmlview"
-	"github.com/arrno/diff-duck/internal/domain"
-	"github.com/arrno/diff-duck/internal/services"
-	"github.com/arrno/diff-duck/internal/services/ports"
+	"github.com/arrno/diffduck/internal/adapters/gitrepo"
+	"github.com/arrno/diffduck/internal/adapters/promptfiles"
+	"github.com/arrno/diffduck/internal/controller/htmlview"
+	"github.com/arrno/diffduck/internal/domain"
+	"github.com/arrno/diffduck/internal/services"
+	"github.com/arrno/diffduck/internal/services/ports"
 )
 
-const usage = `DiffDuck turns the Git diff between two commits into a readable summary.
+const usage = `diffduck turns the Git diff between two commits into a readable summary.
 
 The app:
   diffduck up [flags]                       start the app in the background
@@ -101,7 +101,7 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	opts := options{}
 	fs := flag.NewFlagSet("diffduck", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	fs.StringVar(&opts.out, "out", "", "output directory (default: ./diff-duck-out/<base>..<head>)")
+	fs.StringVar(&opts.out, "out", "", "output directory (default: ./diffduck-out/<base>..<head>)")
 	fs.BoolVar(&opts.structureOnly, "structure-only", false, "skip the model and output only structural facts")
 	fs.StringVar(&opts.readingLevel, "reading-level", string(domain.ReadingSixthGrade), "how plainly summaries are written: 2nd-grade, 6th-grade, high-school, college, or phd")
 	addModelFlags(fs, &opts)
@@ -193,7 +193,7 @@ func execute(ctx context.Context, opts options, level domain.ReadingLevel, targe
 
 	dir := opts.out
 	if dir == "" {
-		dir = filepath.Join("diff-duck-out", shortSHA(result.BaseSHA)+".."+shortSHA(result.HeadSHA))
+		dir = filepath.Join("diffduck-out", shortSHA(result.BaseSHA)+".."+shortSHA(result.HeadSHA))
 		// This path is predictable and may sit inside the analyzed checkout, so a hostile
 		// repository could commit a symlink here.
 		if err := refuseSymlinks(dir); err != nil {
@@ -249,7 +249,7 @@ func write(dir string, result *domain.CompressedDiff) error {
 // replaceFile writes through a temporary file and a rename, which replaces a symlink at the
 // path rather than following it to overwrite its target.
 func replaceFile(path string, data []byte) error {
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".diff-duck-*")
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".diffduck-*")
 	if err != nil {
 		return err
 	}

@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/arrno/diff-duck/internal/domain"
-	"github.com/arrno/diff-duck/internal/services/ports"
+	"github.com/arrno/diffduck/internal/domain"
+	"github.com/arrno/diffduck/internal/services/ports"
 )
 
 // contextLines is how many unchanged lines surround a change in a node's diff excerpt.

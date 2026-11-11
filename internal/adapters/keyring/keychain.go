@@ -10,13 +10,17 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/arrno/diff-duck/internal/domain"
-	"github.com/arrno/diff-duck/internal/services/ports"
+	"github.com/arrno/diffduck/internal/domain"
+	"github.com/arrno/diffduck/internal/services/ports"
 	gokeyring "github.com/zalando/go-keyring"
 )
 
-// Service is the keychain service name every DiffDuck key is filed under.
-const Service = "diff-duck"
+// Service is the keychain service name every diffduck key is filed under.
+const Service = "diffduck"
+
+// LegacyService is the service name keys were filed under before diffduck was renamed. A key
+// found only there is moved to Service the first time it is read.
+const LegacyService = "diff-duck"
 
 var (
 	errSave  = errors.New("could not save the API key to the OS keychain")
@@ -26,11 +30,11 @@ var (
 
 // Keychain stores one API key per model provider, using the provider ID as the account name.
 type Keychain struct {
-	service string
+	service, legacy string
 }
 
-// New returns a keychain filed under Service.
-func New() *Keychain { return &Keychain{service: Service} }
+// New returns a keychain filed under Service that adopts keys left under LegacyService.
+func New() *Keychain { return &Keychain{service: Service, legacy: LegacyService} }
 
 func account(provider domain.ModelProvider) (string, error) {
 	if !provider.Valid() {
@@ -68,10 +72,29 @@ func (k *Keychain) LoadKey(provider domain.ModelProvider) (string, error) {
 	}
 	key, err := gokeyring.Get(k.service, user)
 	if errors.Is(err, gokeyring.ErrNotFound) {
+		return k.adopt(user)
+	}
+	if err != nil {
+		return "", errRead
+	}
+	return key, nil
+}
+
+// adopt moves a key saved under the legacy service name to the current one and returns it. If
+// the move fails the key is still returned, and the next read tries again.
+func (k *Keychain) adopt(user string) (string, error) {
+	if k.legacy == "" {
+		return "", ports.ErrKeyNotSaved
+	}
+	key, err := gokeyring.Get(k.legacy, user)
+	if errors.Is(err, gokeyring.ErrNotFound) {
 		return "", ports.ErrKeyNotSaved
 	}
 	if err != nil {
 		return "", errRead
+	}
+	if gokeyring.Set(k.service, user, key) == nil {
+		_ = gokeyring.Delete(k.legacy, user)
 	}
 	return key, nil
 }
@@ -92,8 +115,14 @@ func (k *Keychain) ClearKey(provider domain.ModelProvider) error {
 	if err != nil {
 		return err
 	}
-	if err := gokeyring.Delete(k.service, user); err != nil && !errors.Is(err, gokeyring.ErrNotFound) {
-		return errClear
+	// A key still under the legacy name would otherwise be adopted again on the next read.
+	for _, service := range []string{k.service, k.legacy} {
+		if service == "" {
+			continue
+		}
+		if err := gokeyring.Delete(service, user); err != nil && !errors.Is(err, gokeyring.ErrNotFound) {
+			return errClear
+		}
 	}
 	return nil
 }

@@ -113,7 +113,7 @@ export function DiffList() {
       {diffs?.length === 0 && (
         <div data-testid="no-diffs" className="space-y-4 py-12 text-center">
           <p className="text-lg font-medium">No diffs yet</p>
-          <p className="text-muted-foreground">Point DiffDuck at a Git repo and pick two commits.</p>
+          <p className="text-muted-foreground">Point diffduck at a Git repo and pick two commits.</p>
           <div className="flex justify-center"><NewDiffLink /></div>
         </div>
       )}

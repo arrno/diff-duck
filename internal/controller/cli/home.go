@@ -9,10 +9,10 @@ import (
 	"path/filepath"
 )
 
-// homeEnv overrides where DiffDuck keeps its database, server record, and log.
+// homeEnv overrides where diffduck keeps its database, server record, and log.
 const homeEnv = "DIFFDUCK_HOME"
 
-// home returns DiffDuck's own directory, creating it readable only by the user.
+// home returns diffduck's own directory, creating it readable only by the user.
 func home() (string, error) {
 	dir := os.Getenv(homeEnv)
 	if dir == "" {
@@ -20,10 +20,33 @@ func home() (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("locate config directory (set %s): %w", homeEnv, err)
 		}
-		dir = filepath.Join(base, "diff-duck")
+		if dir, err = ownDir(base); err != nil {
+			return "", err
+		}
 	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", fmt.Errorf("create %s: %w", dir, err)
+	}
+	return dir, nil
+}
+
+// legacyName is what diffduck called its directories before it was renamed.
+const legacyName = "diff-duck"
+
+// ownDir returns diffduck's directory under base. A directory left by a version that used
+// legacyName is moved there the first time, so saved diffs, the server record, and cached
+// responses carry over. A server still running from the old directory keeps its open files,
+// since moving a directory does not close them.
+func ownDir(base string) (string, error) {
+	dir := filepath.Join(base, "diffduck")
+	if _, err := os.Lstat(dir); !errors.Is(err, fs.ErrNotExist) {
+		return dir, nil
+	}
+	legacy := filepath.Join(base, legacyName)
+	if info, err := os.Lstat(legacy); err == nil && info.IsDir() {
+		if err := os.Rename(legacy, dir); err != nil && !errors.Is(err, fs.ErrExist) {
+			return "", fmt.Errorf("move %s to %s: %w", legacy, dir, err)
+		}
 	}
 	return dir, nil
 }

@@ -5,8 +5,8 @@ package cli
 import (
 	"fmt"
 
-	"github.com/arrno/diff-duck/internal/adapters/keyring"
-	"github.com/arrno/diff-duck/internal/services/ports"
+	"github.com/arrno/diffduck/internal/adapters/keyring"
+	"github.com/arrno/diffduck/internal/services/ports"
 )
 
 // verificationModel rejects every name: canned output is not reachable from a release build.

@@ -8,8 +8,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/arrno/diff-duck/internal/domain"
-	"github.com/arrno/diff-duck/internal/services/ports"
+	"github.com/arrno/diffduck/internal/domain"
+	"github.com/arrno/diffduck/internal/services/ports"
 )
 
 // openRepo is a fake repository that, when gate is set, waits for it before opening.

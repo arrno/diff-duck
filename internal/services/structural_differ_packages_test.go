@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/arrno/diff-duck/internal/domain"
+	"github.com/arrno/diffduck/internal/domain"
 )
 
 // dirRepo serves whole directories of analyses, by commit, so package existence can be asked.
