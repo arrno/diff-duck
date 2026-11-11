@@ -239,7 +239,7 @@ func write(dir string, result *domain.CompressedDiff) error {
 	if err := replaceFile(filepath.Join(dir, "compressed-diff.json"), append(data, '\n')); err != nil {
 		return err
 	}
-	page, err := htmlview.Render(result)
+	page, err := htmlview.Render(result, currentVersion())
 	if err != nil {
 		return err
 	}

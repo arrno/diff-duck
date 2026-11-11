@@ -9,7 +9,7 @@ import { UnitList } from "@/components/diff/Unit";
 import { ViewContext, type ViewState } from "@/components/diff/ViewState";
 import { providerLabel, readingLevelLabel, type CompressedDiff } from "@/lib/model";
 import { assignPackageColors } from "@/lib/packageColor";
-import { allParents, ancestorsOfMatches, bySize, countMatches, isVisible, packageLabel, type Filter } from "@/lib/tree";
+import { allParents, ancestorsOfMatches, byPath, countMatches, isVisible, packageLabel, type Filter } from "@/lib/tree";
 
 function toggled(set: Set<string>, id: string): Set<string> {
   const next = new Set(set);
@@ -20,7 +20,7 @@ function toggled(set: Set<string>, id: string): Set<string> {
 
 /** One compressed diff. `home` and `actions` connect it to the app when it is not a standalone page. */
 export function App({ model, home, actions }: { model: CompressedDiff; home?: string; actions?: ReactNode }) {
-  const packages = useMemo(() => model.nodes.filter((n) => n.kind === "PACKAGE").sort(bySize), [model]);
+  const packages = useMemo(() => model.nodes.filter((n) => n.kind === "PACKAGE").sort(byPath), [model]);
   const otherFiles = useMemo(() => model.nodes.filter((n) => n.kind !== "PACKAGE"), [model]);
   useEffect(() => {
     const repository = model.repository.replace(/\/+$/, "").split("/").pop()?.replace(/\.git$/, "");

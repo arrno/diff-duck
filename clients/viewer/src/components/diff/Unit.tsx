@@ -1,13 +1,53 @@
+import type { ReactNode } from "react";
 import { AlertTriangle, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { DiffNode } from "@/lib/model";
 import { packageStyle } from "@/lib/packageColor";
-import { descendantCount, isVisible, matches, packageLabel } from "@/lib/tree";
+import { abbreviate, descendantCount, isVisible, matches, packageLabel } from "@/lib/tree";
 import { cn } from "@/lib/utils";
 import { SourceDiff } from "./SourceDiff";
 import { useView } from "./ViewState";
 import { Chevron, KindIcon, LineStats, OpBadge } from "./visuals";
+
+/**
+ * A name that may be long, such as a file path: shortened in the middle, wrapping within its own
+ * column so the icon and badge before it stay put. A shortened name shows the full one in a
+ * tooltip on hover, and on focus when `focusable`; a screen reader always hears the full name.
+ * Inside a button, leave `focusable` off: a control may not hold another one.
+ */
+function Name({ name, className, focusable = false }: { name: string; className?: string; focusable?: boolean }) {
+  const short = abbreviate(name);
+  const style = cn("min-w-0 py-1 font-mono [overflow-wrap:anywhere]", className);
+  if (short === name) return <span className={style}>{name}</span>;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          data-testid="abbreviated-name"
+          tabIndex={focusable ? 0 : undefined}
+          className={cn(style, "cursor-default underline decoration-dotted underline-offset-4 focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-ring")}
+        >
+          <span aria-hidden>{short}</span>
+          <span className="sr-only">{name}</span>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{name}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+/**
+ * The fixed columns that start a row: the toggle or its space, the kind, and the change. They
+ * sit on the first line however far the rest of the row wraps.
+ */
+function Lead({ children }: { children: ReactNode }) {
+  return <span className="flex h-7 shrink-0 items-center gap-3">{children}</span>;
+}
+
+/** The rest of a row, which wraps within its own column. */
+const rest = "flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1";
 
 function SummaryText({ node, className }: { node: DiffNode; className?: string }) {
   const { text, origin } = node.summary;
@@ -83,13 +123,17 @@ function Details({ node }: { node: DiffNode }) {
 function CompactRow({ node }: { node: DiffNode }) {
   return (
     <li data-node-id={node.id} className="rounded-md py-1 hover:bg-muted/50">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <span aria-hidden className="size-7 shrink-0" />
-        <KindIcon kind={node.kind} />
-        <OpBadge op={node.op} />
-        <span className="min-w-0 font-mono text-sm break-words">{node.signature || node.name}</span>
-        <IdentityTags node={node} />
-        <SourceToggle node={node} />
+      <div className="flex items-start gap-3">
+        <Lead>
+          <span aria-hidden className="size-7 shrink-0" />
+          <KindIcon kind={node.kind} />
+          <OpBadge op={node.op} />
+        </Lead>
+        <span className={rest}>
+          <Name name={node.signature || node.name} className="text-sm" focusable />
+          <IdentityTags node={node} />
+          <SourceToggle node={node} />
+        </span>
       </div>
       <div className="ml-17 space-y-1 empty:hidden">
         {node.previousSignature && <p className="font-mono text-xs break-words text-muted-foreground">Was: {node.previousSignature}</p>}
@@ -105,13 +149,17 @@ function CompactRow({ node }: { node: DiffNode }) {
 function LeafRow({ node }: { node: DiffNode }) {
   return (
     <li data-node-id={node.id} className="rounded-md py-2 hover:bg-muted/50">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <span aria-hidden className="size-7 shrink-0" />
-        <KindIcon kind={node.kind} />
-        <span className="min-w-0 font-mono text-sm font-semibold break-words">{node.summary.semanticName || node.name}</span>
-        <OpBadge op={node.op} />
-        <IdentityTags node={node} />
-        <span className="ml-auto"><LineStats added={node.added} removed={node.removed} /></span>
+      <div className="flex items-start gap-3">
+        <Lead>
+          <span aria-hidden className="size-7 shrink-0" />
+          <KindIcon kind={node.kind} />
+          <OpBadge op={node.op} />
+        </Lead>
+        <span className={rest}>
+          <Name name={node.summary.semanticName || node.name} className="text-sm font-semibold" focusable />
+          <IdentityTags node={node} />
+          <span className="ml-auto"><LineStats added={node.added} removed={node.removed} /></span>
+        </span>
       </div>
       <div className="mt-1 ml-17 space-y-1">
         <PreviousIdentity node={node} />
@@ -121,16 +169,6 @@ function LeafRow({ node }: { node: DiffNode }) {
         <Details node={node} />
       </div>
     </li>
-  );
-}
-
-function PackageTitle({ node, slot }: { node: DiffNode; slot: number | undefined }) {
-  const label = packageLabel(node);
-  return (
-    <span style={packageStyle(slot)} className="contents">
-      <Package aria-hidden className="size-4 shrink-0 [color:var(--pkg)]" />
-      <span data-testid="package-name" className="text-lg font-semibold break-words [color:var(--pkg)]">{label}</span>
-    </span>
   );
 }
 
@@ -147,20 +185,21 @@ function GroupRow({ node, colors }: { node: DiffNode; colors: Map<string, number
         <CollapsibleTrigger
           data-toggle={node.id}
           aria-label={`${open ? "Collapse" : "Expand"} ${node.name}`}
-          className="group flex w-full items-center gap-3 rounded-md py-1 text-left hover:bg-muted/50"
+          style={isPackage ? packageStyle(colors.get(label)) : undefined}
+          className="group flex w-full items-start gap-3 rounded-md py-1 text-left hover:bg-muted/50"
         >
-          <Chevron open={open} />
-          <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
-            {isPackage ? (
-              <PackageTitle node={node} slot={colors.get(label)} />
-            ) : (
-              <>
-                <KindIcon kind={node.kind} />
-                <span className="min-w-0 font-mono text-base font-semibold break-words">{node.summary.semanticName || node.name}</span>
-              </>
-            )}
+          <Lead>
+            <Chevron open={open} />
+            {isPackage ? <Package aria-hidden className="size-4 shrink-0 [color:var(--pkg)]" /> : <KindIcon kind={node.kind} />}
             <OpBadge op={node.op} />
-            {isPackage && node.name !== label && <span className="font-mono text-xs break-words text-muted-foreground">{node.name}</span>}
+          </Lead>
+          <span className={rest}>
+            {isPackage ? (
+              <span data-testid="package-name" className="min-w-0 text-lg font-semibold [overflow-wrap:anywhere] [color:var(--pkg)]">{label}</span>
+            ) : (
+              <Name name={node.summary.semanticName || node.name} className="py-0.5 text-base font-semibold" />
+            )}
+            {isPackage && node.name !== label && <Name name={node.name} className="text-xs text-muted-foreground" />}
             <IdentityTags node={node} />
             <span data-testid="descendants" className="text-xs text-muted-foreground">{descendantCount(node, filter, unassigned)} inside</span>
             <span className="ml-auto"><LineStats added={node.added} removed={node.removed} /></span>
@@ -187,7 +226,7 @@ function RegionRow({ node }: { node: DiffNode }) {
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
         <span aria-hidden className="size-7 shrink-0" />
         <KindIcon kind={node.kind} />
-        <span className="font-mono">{node.name}</span>
+        <Name name={node.name} focusable />
         <span className="max-w-prose min-w-0">{node.summary.text}</span>
         <LineStats added={node.added} removed={node.removed} />
         <SourceToggle node={node} />

@@ -15,6 +15,8 @@ go build -tags verify -o "$VERIFY_WORK/diffduck" ./cmd/diffduck
 bin="$VERIFY_WORK/diffduck"
 "$bin" --adapter scripted:normal --no-cache --out "$VERIFY_WORK/normal" "$fixture" base head >/dev/null
 "$bin" --structure-only --out "$VERIFY_WORK/empty" "$fixture" base base >/dev/null
+verify/make-paths-fixture.sh "$VERIFY_WORK/paths-fixture"
+"$bin" --structure-only --out "$VERIFY_WORK/paths" "$VERIFY_WORK/paths-fixture" base head >/dev/null
 set +e
 "$bin" --adapter scripted:fail --no-cache --out "$VERIFY_WORK/failed" "$fixture" base head >/dev/null 2>&1
 code=$?
