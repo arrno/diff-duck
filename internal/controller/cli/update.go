@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -121,21 +122,24 @@ func runUpdate(ctx context.Context, args []string, stdout, stderr io.Writer) int
 }
 
 // goBinDir is where go install writes binaries: GOBIN, or bin under the first GOPATH entry.
+// It asks for JSON because GOBIN is usually unset, and as plain lines an empty value is easy to
+// lose: trimming the output once made GOPATH look like GOBIN.
 func goBinDir(ctx context.Context, goTool, dir string) (string, error) {
-	cmd := exec.CommandContext(ctx, goTool, "env", "GOBIN", "GOPATH")
+	cmd := exec.CommandContext(ctx, goTool, "env", "-json", "GOBIN", "GOPATH")
 	cmd.Dir = dir
 	out, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("go env failed: %w", err)
 	}
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	if gobin := strings.TrimSpace(lines[0]); gobin != "" {
+	var env struct{ GOBIN, GOPATH string }
+	if err := json.Unmarshal(out, &env); err != nil {
+		return "", fmt.Errorf("go env answered something other than JSON: %w", err)
+	}
+	if gobin := strings.TrimSpace(env.GOBIN); gobin != "" {
 		return gobin, nil
 	}
-	if len(lines) > 1 {
-		if gopath := strings.TrimSpace(filepath.SplitList(lines[1])[0]); gopath != "" {
-			return filepath.Join(gopath, "bin"), nil
-		}
+	if list := filepath.SplitList(env.GOPATH); len(list) > 0 && strings.TrimSpace(list[0]) != "" {
+		return filepath.Join(strings.TrimSpace(list[0]), "bin"), nil
 	}
 	return "", errors.New("go env names neither GOBIN nor GOPATH, so the install location is unknown")
 }

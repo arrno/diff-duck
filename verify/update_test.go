@@ -10,23 +10,32 @@ import (
 	"testing"
 )
 
-// fakeGo writes a stand-in go command that answers `go env` with gobin and, on `go install`,
-// records what it was asked to install and copies the verification binary into gobin. It
-// returns the directory to put first on PATH and the file holding the install request.
-func fakeGo(t *testing.T, gobin string) (bin, request string) {
+// fakeGo writes a stand-in go command. `go env -json` answers with gobin and gopath, as the real
+// one does, and `go install` records what it was asked to install and puts the verification
+// binary where Go would: gobin, or bin under gopath when gobin is empty. It returns the
+// directory to put first on PATH, the file holding the install request, and the binary's path.
+func fakeGo(t *testing.T, gobin, gopath string) (bin, request, installed string) {
 	t.Helper()
 	bin = t.TempDir()
 	request = filepath.Join(t.TempDir(), "request")
+	dir := gobin
+	if dir == "" {
+		dir = filepath.Join(gopath, "bin")
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	installed = filepath.Join(dir, "diffduck")
+	env, _ := json.Marshal(map[string]string{"GOBIN": gobin, "GOPATH": gopath})
 	// Like go install, replace the file rather than write into it: the app may be running it.
-	target := filepath.Join(gobin, "diffduck")
-	script := "#!/bin/sh\ncase \"$1\" in\n" +
-		"env) echo '" + gobin + "'; echo /nonexistent ;;\n" +
-		"install) echo \"$2\" > '" + request + "'; cp '" + binary + "' '" + target + ".new' && mv '" + target + ".new' '" + target + "' ;;\n" +
+	script := "#!/bin/sh\ncase \"$1 $2\" in\n" +
+		"'env -json') cat <<'EOF'\n" + string(env) + "\nEOF\n;;\n" +
+		"install*) echo \"$2\" > '" + request + "'; cp '" + binary + "' '" + installed + ".new' && mv '" + installed + ".new' '" + installed + "' ;;\n" +
 		"*) exit 1 ;;\nesac\n"
 	if err := os.WriteFile(filepath.Join(bin, "go"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	return bin, request
+	return bin, request, installed
 }
 
 func TestVersion(t *testing.T) {
@@ -43,8 +52,8 @@ func TestVersion(t *testing.T) {
 // its saved settings.
 func TestUpdate(t *testing.T) {
 	c := newAppCLI(t)
-	gobin := t.TempDir()
-	bin, request := fakeGo(t, gobin)
+	// GOBIN is usually unset, so Go installs under GOPATH.
+	bin, request, installed := fakeGo(t, "", t.TempDir())
 	c.env = []string{"PATH=" + bin + string(os.PathListSeparator) + os.Getenv("PATH")}
 	if url := appURL.FindString(c.must("up", "--adapter", "scripted:normal", "--no-cache", "--port", "0")); url == "" {
 		t.Fatal("up printed no address")
@@ -58,7 +67,6 @@ func TestUpdate(t *testing.T) {
 	if got, _ := os.ReadFile(request); strings.TrimSpace(string(got)) != "github.com/arrno/diff-duck/cmd/diffduck@latest" {
 		t.Fatalf("installed %q", got)
 	}
-	installed := filepath.Join(gobin, "diffduck")
 	if !strings.Contains(stdout, installed) || !strings.Contains(stdout, "running again") {
 		t.Fatalf("update output: %s", stdout)
 	}
@@ -100,6 +108,14 @@ func TestUpdate(t *testing.T) {
 	}
 	if _, err := os.Stat(request); err == nil {
 		t.Fatal("a refused update ran go install")
+	}
+
+	// A GOBIN, when set, is where Go installs.
+	gobin := t.TempDir()
+	bin, _, installed = fakeGo(t, gobin, t.TempDir())
+	c.env = []string{"PATH=" + bin + string(os.PathListSeparator) + os.Getenv("PATH")}
+	if out := c.must("update"); !strings.Contains(out, filepath.Join(gobin, "diffduck")) {
+		t.Fatalf("update with GOBIN set: %s", out)
 	}
 
 	// Without Go there is nothing to install with.
