@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Navbar } from "@/components/Navbar";
 import { Outcomes, ScopeFilters } from "@/components/diff/Outcomes";
@@ -10,6 +11,16 @@ import { ViewContext, type ViewState } from "@/components/diff/ViewState";
 import { providerLabel, readingLevelLabel, type CompressedDiff } from "@/lib/model";
 import { assignPackageColors } from "@/lib/packageColor";
 import { allPackages, allParents, ancestorsOfMatches, byPath, countMatches, isVisible, packageLabel, type Filter } from "@/lib/tree";
+
+/** One fact about how a diff was made, as a light grey chip. */
+function InfoChip({ label, mono = false, children }: { label?: string; mono?: boolean; children: ReactNode }) {
+  return (
+    <li className="rounded-md bg-muted px-2.5 py-1">
+      {label && <>{label}: </>}
+      <span className={cn("font-medium text-foreground", mono && "font-mono break-all")}>{children}</span>
+    </li>
+  );
+}
 
 function toggled(set: Set<string>, id: string): Set<string> {
   const next = new Set(set);
@@ -145,13 +156,18 @@ export function App({ model, home, actions }: { model: CompressedDiff; home?: st
           </section>
         </div>
 
-        <footer data-testid="generation" className="border-t pt-4 text-xs text-muted-foreground">
-          {model.generation.provider && <>Provider: {providerLabel(model.generation.provider)}. </>}
-          Model: {model.generation.model}.{" "}
-          {model.generation.readingLevel && <>Reading level: {readingLevelLabel(model.generation.readingLevel)}. </>}
-          Prompts: {model.generation.promptVariant}. {model.metrics.compressionRatio.toFixed(1)}x compression in the opening view.
-          {" "}A summary explains apparent behavior; it does not verify the code is correct.
-        </footer>
+        {/* How this diff was made, as quiet facts rather than a page section. */}
+        <ul data-testid="generation" aria-label="How this diff was made" className="flex flex-wrap gap-2 border-t pt-6 text-xs text-muted-foreground">
+          {model.generation.provider && <InfoChip label="Provider">{providerLabel(model.generation.provider)}</InfoChip>}
+          <InfoChip label="Model" mono>{model.generation.model}</InfoChip>
+          {model.generation.readingLevel && <InfoChip label="Reading level">{readingLevelLabel(model.generation.readingLevel)}</InfoChip>}
+          <InfoChip label="Prompts">{model.generation.promptVariant}</InfoChip>
+          <InfoChip>{model.metrics.compressionRatio.toFixed(1)}x compression in the opening view</InfoChip>
+          <li className="flex items-center gap-1.5 rounded-md bg-muted px-2.5 py-1">
+            <Info aria-hidden className="size-3.5 shrink-0" />
+            A summary explains apparent behavior; it does not verify the code is correct.
+          </li>
+        </ul>
       </main>
       <SiteFooter />
     </ViewContext.Provider>

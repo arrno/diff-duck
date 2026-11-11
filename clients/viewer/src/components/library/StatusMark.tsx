@@ -13,7 +13,7 @@ export function StatusMark({ status }: { status: DiffStatus }) {
   const { icon, label, text, soft } = STATUS[status];
   return (
     <span className={`inline-flex shrink-0 items-center gap-2 text-xs font-semibold tracking-wide ${text}`}>
-      <IconMark icon={icon} soft={soft} />
+      <IconMark icon={icon} soft={soft} spin={status === "running"} />
       {label}
     </span>
   );

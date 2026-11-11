@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { createDiff, listCommits, type Commit } from "@/lib/api";
 import { timeAgo } from "@/lib/format";
@@ -129,7 +130,7 @@ export function NewDiff() {
             required
             autoFocus
           />
-          <Button type="submit" disabled={loading} className="shrink-0">{loading ? "Loading…" : "Load commits"}</Button>
+          <Button type="submit" disabled={loading} className="shrink-0">{loading ? <><Spinner />Loading…</> : "Load commits"}</Button>
         </div>
       </form>
 
@@ -173,7 +174,7 @@ export function NewDiff() {
           {same && <p role="status" className="text-sm text-warn">From and To are the same, so there will be nothing to show.</p>}
 
           <div className="flex flex-wrap items-center gap-3">
-            <Button type="submit" disabled={creating || !base.trim() || !head.trim()}>{creating ? "Starting…" : "Create diff"}</Button>
+            <Button type="submit" disabled={creating || !base.trim() || !head.trim()}>{creating ? <><Spinner />Starting…</> : "Create diff"}</Button>
             <p className="text-xs text-muted-foreground">Uses your model and can take a few minutes. It keeps running if you leave this page.</p>
           </div>
         </form>

@@ -8,7 +8,7 @@ go test -count=1 ./...
 
 export VERIFY_WORK; VERIFY_WORK="$(mktemp -d)"
 server=""
-trap '[ -n "$server" ] && kill "$server" 2>/dev/null; rm -rf "$VERIFY_WORK"' EXIT
+trap '[ -n "$server" ] && kill $server 2>/dev/null; rm -rf "$VERIFY_WORK"' EXIT
 fixture="$VERIFY_WORK/fixture"
 verify/make-fixture.sh "$fixture"
 go build -tags verify -o "$VERIFY_WORK/diffduck" ./cmd/diffduck
@@ -29,16 +29,25 @@ set -e
 stubs="$VERIFY_WORK/stub-bin"
 mkdir -p "$stubs"
 for name in claude codex; do printf '#!/bin/sh\nexit 1\n' >"$stubs/$name"; chmod +x "$stubs/$name"; done
-PATH="$stubs:$PATH" DIFFDUCK_HOME="$VERIFY_WORK/home" "$bin" serve --adapter scripted:normal --no-cache --no-open --port 0 --db "$VERIFY_WORK/app/diffs.db" >"$VERIFY_WORK/server.log" 2>&1 &
-server=$!
-for _ in $(seq 1 100); do
-  APP_URL="$(grep -o 'http://127.0.0.1:[0-9]*/' "$VERIFY_WORK/server.log" || true)"
-  [ -n "$APP_URL" ] && break
-  kill -0 "$server" || { cat "$VERIFY_WORK/server.log"; exit 1; }
-  perl -e 'select(undef, undef, undef, 0.1)'
-done
-[ -n "$APP_URL" ] || { echo "the app did not start"; exit 1; }
-export APP_URL APP_FIXTURE="$fixture"
+# start_app <name> <adapter> runs an app with its own home and database, and prints its address.
+start_app() {
+  PATH="$stubs:$PATH" DIFFDUCK_HOME="$VERIFY_WORK/home-$1" "$bin" serve --adapter "$2" --no-cache --no-open --port 0 --db "$VERIFY_WORK/app-$1/diffs.db" >"$VERIFY_WORK/server-$1.log" 2>&1 &
+  # This runs in a subshell, so the process ID is passed back through a file.
+  echo $! >>"$VERIFY_WORK/servers.pid"
+  for _ in $(seq 1 100); do
+    url="$(grep -o 'http://127.0.0.1:[0-9]*/' "$VERIFY_WORK/server-$1.log" || true)"
+    [ -n "$url" ] && { echo "$url"; return; }
+    perl -e 'select(undef, undef, undef, 0.1)'
+  done
+  cat "$VERIFY_WORK/server-$1.log" >&2; echo "the $1 app did not start" >&2; exit 1
+}
+APP_URL="$(start_app main scripted:normal)"
+server="$(cat "$VERIFY_WORK/servers.pid")"
+# A second app whose model is slow, so diffs can be seen while they build.
+SLOW_APP_URL="$(start_app slow scripted:slow)"
+server="$(cat "$VERIFY_WORK/servers.pid")"
+[ -n "$APP_URL" ] && [ -n "$SLOW_APP_URL" ] || exit 1
+export APP_URL SLOW_APP_URL APP_FIXTURE="$fixture"
 
 npx playwright install chromium >/dev/null
 npx playwright test --config verify/playwright.config.ts
