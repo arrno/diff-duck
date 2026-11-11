@@ -10,7 +10,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/arrno/diff-duck/internal/domain"
+	"github.com/arrno/diffduck/internal/domain"
 )
 
 // Source implements ports.PromptSource.

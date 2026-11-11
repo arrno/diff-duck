@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/arrno/diff-duck/internal/domain"
+	"github.com/arrno/diffduck/internal/domain"
 )
 
 // analyzeJS analyzes a file, with the grammar its extension selects.

@@ -6,11 +6,13 @@ import { createDiff, listCommits, type Commit } from "@/lib/api";
 import { timeAgo } from "@/lib/format";
 import { diffHref, HOME, usePageTitle } from "./Library";
 
-const LAST_REPO_KEY = "diff-duck:last-repository";
+const LAST_REPO_KEY = "diffduck:last-repository";
+// The key used before diffduck was renamed, still read so the last repository carries over.
+const LEGACY_LAST_REPO_KEY = "diff-duck:last-repository";
 
 function remembered(): string {
   try {
-    return localStorage.getItem(LAST_REPO_KEY) ?? "";
+    return localStorage.getItem(LAST_REPO_KEY) ?? localStorage.getItem(LEGACY_LAST_REPO_KEY) ?? "";
   } catch {
     return "";
   }

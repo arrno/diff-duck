@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/arrno/diff-duck/internal/domain"
+	"github.com/arrno/diffduck/internal/domain"
 )
 
 // findNodes returns every node with the name, in tree order.

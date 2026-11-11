@@ -3,9 +3,9 @@ package cli
 import (
 	"context"
 
-	"github.com/arrno/diff-duck/internal/adapters/goanalysis"
-	"github.com/arrno/diff-duck/internal/adapters/treesitter"
-	"github.com/arrno/diff-duck/internal/services/ports"
+	"github.com/arrno/diffduck/internal/adapters/goanalysis"
+	"github.com/arrno/diffduck/internal/adapters/treesitter"
+	"github.com/arrno/diffduck/internal/services/ports"
 )
 
 // buildAnalyzers returns one analyzer per supported language. Grammars compile on first use,

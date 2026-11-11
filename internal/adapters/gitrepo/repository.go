@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/arrno/diff-duck/internal/domain"
-	"github.com/arrno/diff-duck/internal/services/ports"
+	"github.com/arrno/diffduck/internal/domain"
+	"github.com/arrno/diffduck/internal/services/ports"
 )
 
 // Repository is an opened Git repository.
@@ -81,7 +81,7 @@ func clone(ctx context.Context, target string) (*Repository, error) {
 	if strings.HasPrefix(url, "github.com/") {
 		url = "https://" + url
 	}
-	dir, err := os.MkdirTemp("", "diff-duck-clone-")
+	dir, err := os.MkdirTemp("", "diffduck-clone-")
 	if err != nil {
 		return nil, err
 	}

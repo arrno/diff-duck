@@ -1,4 +1,4 @@
-module github.com/arrno/diff-duck
+module github.com/arrno/diffduck
 
 go 1.26.2
 

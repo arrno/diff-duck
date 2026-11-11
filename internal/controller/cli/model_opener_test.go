@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/arrno/diff-duck/internal/adapters/modelcache"
-	"github.com/arrno/diff-duck/internal/domain"
-	"github.com/arrno/diff-duck/internal/services/ports"
+	"github.com/arrno/diffduck/internal/adapters/modelcache"
+	"github.com/arrno/diffduck/internal/domain"
+	"github.com/arrno/diffduck/internal/services/ports"
 )
 
 const secret = "sk-test-secret-0123456789"

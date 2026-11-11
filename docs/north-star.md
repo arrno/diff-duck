@@ -1,4 +1,4 @@
-# North Star: DiffDuck v1
+# North Star: diffduck v1
 
 Product intent and invariants live in [concept.md](concept.md) (I1–I12). This document only
 records what v1 includes, the decisions made for it, and how it is accepted.
@@ -29,7 +29,7 @@ drives it from a shell, so a person or a coding agent can say "diffduck it" and 
 | Reading level | Five levels (2nd grade to PhD), saved app-wide, default 6th grade. Each level's instructions are Markdown in the prompt variant and part of the cache identity. |
 | UI | React and shadcn/ui in `clients/viewer`, built into one HTML page. Standalone, the page holds one diff and needs no server. Under `diffduck serve`, the same page is the app. This is an agreed exception to `ui-architecture.md`: no Next.js or login, because the app is local to one person. Its component, theming, accessibility, and Playwright rules still apply. |
 | Local app | Listens only on `127.0.0.1`. Every request must name this server in `Host` and must not come from another site, because the API runs git and spends model calls. Every diff is saved when requested, one runs at a time, and a failed or stopped run stays listed. |
-| App commands | The CLI is a client of the app's own HTTP API, so the browser and the shell share one server, one queue, and one database. The running server records its PID and port in `server.json` in the DiffDuck home (`$DIFFDUCK_HOME`, default `diff-duck` in the user config directory); a command trusts the record only when `/api/health` answers with that PID. `diff` starts the app when none is running. Relative repo paths are resolved by the caller, not the server. |
+| App commands | The CLI is a client of the app's own HTTP API, so the browser and the shell share one server, one queue, and one database. The running server records its PID and port in `server.json` in the diffduck home (`$DIFFDUCK_HOME`, default `diffduck` in the user config directory); a command trusts the record only when `/api/health` answers with that PID. `diff` starts the app when none is running. Relative repo paths are resolved by the caller, not the server. |
 | Storage | SQLite through `modernc.org/sqlite`, which needs no cgo, behind the `DiffStore` port. Saved diffs hold source code, so the file is private to the user. |
 | Review | One integrated review before verification, instead of one per step. |
 

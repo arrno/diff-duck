@@ -6,7 +6,7 @@ Extends [north-star.md](../north-star.md) (v1). Product invariants I1–I12 live
 
 ## North Star
 
-**Goal.** DiffDuck compresses diffs in Go, Python, JavaScript/TypeScript, Rust, C#, and Java;
+**Goal.** diffduck compresses diffs in Go, Python, JavaScript/TypeScript, Rust, C#, and Java;
 the person picks which model writes the summaries; and summaries are written at a reading
 level the person chooses.
 

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/arrno/diff-duck/internal/domain"
+	"github.com/arrno/diffduck/internal/domain"
 
 	_ "modernc.org/sqlite" // Lets a test hold the app's database open.
 )

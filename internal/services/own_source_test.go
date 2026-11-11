@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/arrno/diff-duck/internal/domain"
-	"github.com/arrno/diff-duck/internal/services/ports"
+	"github.com/arrno/diffduck/internal/domain"
+	"github.com/arrno/diffduck/internal/services/ports"
 )
 
 // bigModule is a Python module far over the model's field bound: an import, then functions

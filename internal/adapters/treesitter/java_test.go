@@ -7,7 +7,7 @@ import (
 	"testing"
 	"unsafe"
 
-	"github.com/arrno/diff-duck/internal/domain"
+	"github.com/arrno/diffduck/internal/domain"
 )
 
 func analyzeJava(t *testing.T, rt *Runtime, p, src string) domain.FileAnalysis {

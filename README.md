@@ -7,13 +7,13 @@
 <p align="center"><strong>A compressed diff.</strong> Know what changed, and where, like a duck to water.</p>
 
 <p align="center">
-  <img src="docs/preview.png" alt="DiffDuck showing a change: a one-paragraph overview, outcomes on the left, and the package, type, and function tree on the right, each with a one-line description" width="900">
+  <img src="docs/preview.png" alt="diffduck showing a change: a one-paragraph overview, outcomes on the left, and the package, type, and function tree on the right, each with a one-line description" width="900">
 </p>
 
 ## About
 
 A raw diff is a wall of red and green in file order. You have to read all of it to learn what it
-does. DiffDuck compresses the same diff into something you can take in at a glance, without
+does. diffduck compresses the same diff into something you can take in at a glance, without
 hiding any of it.
 
 It slices the change two ways:
@@ -57,7 +57,7 @@ Every other file still appears, as a file-level change, so nothing in the diff i
 ## Install
 
 ```sh
-go install github.com/arrno/diff-duck/cmd/diffduck@latest
+go install github.com/arrno/diffduck/cmd/diffduck@latest
 ```
 
 Or from a clone: `make build`, which writes `bin/diffduck`.
@@ -75,6 +75,16 @@ given release. `diffduck version` prints what is installed.
 
 If you built from a clone, `git pull && make build`, then `diffduck down`; the next command starts
 the new binary.
+
+**Upgrading from v0.1.2 or earlier.** The module was renamed from `github.com/arrno/diff-duck`, so
+`diffduck update` in those versions cannot find new releases. Install once by hand:
+
+```sh
+go install github.com/arrno/diffduck/cmd/diffduck@latest && diffduck down
+```
+
+Saved diffs, cached responses, and API keys carry over: the first run moves them from their old
+`diff-duck` locations.
 
 ## Use
 
@@ -139,7 +149,7 @@ find diffs, and `diffduck diff show <id> --json` to read one. Errors go to stder
 
 ## Data
 
-Saved diffs, the server record, and its log live in the DiffDuck home: `diff-duck` in your user
+Saved diffs, the server record, and its log live in the diffduck home: `diffduck` in your user
 config directory, or `$DIFFDUCK_HOME`. The server listens only on `127.0.0.1`.
 
 ## Releasing

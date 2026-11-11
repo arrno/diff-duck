@@ -1,4 +1,4 @@
-// The compressed diff as diff-duck publishes it. The viewer only presents this model.
+// The compressed diff as diffduck publishes it. The viewer only presents this model.
 
 export type ChangeOp = "ADD" | "REMOVE" | "CHANGE";
 export type UnitKind =

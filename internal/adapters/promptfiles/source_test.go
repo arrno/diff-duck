@@ -7,8 +7,8 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/arrno/diff-duck/internal/domain"
-	"github.com/arrno/diff-duck/prompts"
+	"github.com/arrno/diffduck/internal/domain"
+	"github.com/arrno/diffduck/prompts"
 )
 
 func builtIn(t *testing.T) *Source {

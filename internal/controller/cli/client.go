@@ -11,12 +11,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/arrno/diff-duck/internal/controller/server"
-	"github.com/arrno/diff-duck/internal/domain"
-	"github.com/arrno/diff-duck/internal/services"
+	"github.com/arrno/diffduck/internal/controller/server"
+	"github.com/arrno/diffduck/internal/domain"
+	"github.com/arrno/diffduck/internal/services"
 )
 
-// appClient talks to a running DiffDuck server over its loopback API.
+// appClient talks to a running diffduck server over its loopback API.
 type appClient struct {
 	base string
 	http *http.Client
@@ -26,7 +26,7 @@ func newAppClient(r serverRecord) *appClient {
 	return &appClient{base: strings.TrimSuffix(r.url(), "/"), http: &http.Client{Timeout: 30 * time.Second}}
 }
 
-// health reports whether the server answering is the DiffDuck process recorded as pid.
+// health reports whether the server answering is the diffduck process recorded as pid.
 func (c *appClient) health(ctx context.Context, pid int) bool {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
@@ -106,7 +106,7 @@ func (c *appClient) do(ctx context.Context, method, path string, in, out any) er
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return fmt.Errorf("reach DiffDuck at %s: %w", c.base, err)
+		return fmt.Errorf("reach diffduck at %s: %w", c.base, err)
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
@@ -120,7 +120,7 @@ func (c *appClient) do(ctx context.Context, method, path string, in, out any) er
 		if json.Unmarshal(data, &e) == nil && e.Error != "" {
 			return errors.New(e.Error)
 		}
-		return fmt.Errorf("DiffDuck answered %s", resp.Status)
+		return fmt.Errorf("diffduck answered %s", resp.Status)
 	}
 	if out == nil {
 		return nil

@@ -6,8 +6,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/arrno/diff-duck/internal/domain"
-	"github.com/arrno/diff-duck/internal/services/ports"
+	"github.com/arrno/diffduck/internal/domain"
+	"github.com/arrno/diffduck/internal/services/ports"
 )
 
 // LoadSettings returns the saved model settings, ports.ErrSettingsNotSaved when none have been

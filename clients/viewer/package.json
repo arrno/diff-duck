@@ -1,5 +1,5 @@
 {
-  "name": "diff-duck-viewer",
+  "name": "diffduck-viewer",
   "private": true,
   "type": "module",
   "scripts": {

@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/arrno/diff-duck/internal/adapters/sqlitestore"
-	"github.com/arrno/diff-duck/internal/services"
-	"github.com/arrno/diff-duck/internal/services/ports"
+	"github.com/arrno/diffduck/internal/adapters/sqlitestore"
+	"github.com/arrno/diffduck/internal/services"
+	"github.com/arrno/diffduck/internal/services/ports"
 )
 
 type noRepositories struct{}

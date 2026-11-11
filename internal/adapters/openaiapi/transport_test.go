@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/arrno/diff-duck/internal/services/ports"
+	"github.com/arrno/diffduck/internal/services/ports"
 )
 
 // reply is one scripted server answer.
@@ -51,7 +51,7 @@ func scripted(t *testing.T, replies ...reply) (*httptest.Server, *atomic.Int32) 
 
 func ok() reply { return reply{status: 200, body: response("completed", "", text(`{"ok":true}`))} }
 
-func TestTheWireRequestIsExactlyWhatDiffDuckMeans(t *testing.T) {
+func TestTheWireRequestIsExactlyWhatWeMean(t *testing.T) {
 	var body map[string]any
 	var hdr http.Header
 	var path string
@@ -72,7 +72,7 @@ func TestTheWireRequestIsExactlyWhatDiffDuckMeans(t *testing.T) {
 	if path != "/v1/responses" {
 		t.Fatalf("path: %s", path)
 	}
-	if hdr.Get("Authorization") != "Bearer "+key || hdr.Get("User-Agent") != "diff-duck" || hdr.Get("Content-Type") != "application/json" {
+	if hdr.Get("Authorization") != "Bearer "+key || hdr.Get("User-Agent") != "diffduck" || hdr.Get("Content-Type") != "application/json" {
 		t.Fatalf("headers: %v", hdr)
 	}
 	var keys []string

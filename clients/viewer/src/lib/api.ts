@@ -58,7 +58,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     response = await fetch(path, init);
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") throw err;
-    throw new Error("Can't reach DiffDuck. Is it still running?");
+    throw new Error("Can't reach diffduck. Is it still running?");
   }
   if (response.status === 204) return undefined as T;
   const body = await response.json().catch(() => null);

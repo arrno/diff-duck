@@ -5,7 +5,7 @@ package cli
 import (
 	"testing"
 
-	"github.com/arrno/diff-duck/internal/domain"
+	"github.com/arrno/diffduck/internal/domain"
 )
 
 // Run with: go test -tags verify ./internal/controller/cli

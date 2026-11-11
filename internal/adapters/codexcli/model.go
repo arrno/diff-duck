@@ -43,7 +43,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/arrno/diff-duck/internal/services/ports"
+	"github.com/arrno/diffduck/internal/services/ports"
 )
 
 const defaultBinary = "codex"
@@ -92,13 +92,13 @@ func Available(binary string) bool {
 // Close when finished.
 func New(binary, model, effort string) (*Model, error) {
 	if !canStopProcessTree {
-		return nil, fmt.Errorf("the codex adapter is not supported on %s: DiffDuck cannot stop the processes Codex starts here, so it could not stop Codex at its first tool call", runtime.GOOS)
+		return nil, fmt.Errorf("the codex adapter is not supported on %s: diffduck cannot stop the processes Codex starts here, so it could not stop Codex at its first tool call", runtime.GOOS)
 	}
 	binary = orDefault(binary)
 	if _, err := exec.LookPath(binary); err != nil {
 		return nil, fmt.Errorf("the codex adapter needs %q on PATH: %w", binary, err)
 	}
-	root, err := os.MkdirTemp("", "diff-duck-codex-")
+	root, err := os.MkdirTemp("", "diffduck-codex-")
 	if err != nil {
 		return nil, err
 	}

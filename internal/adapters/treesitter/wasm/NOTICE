@@ -5,7 +5,7 @@ Each <language>.wasm in this directory is one wasm32-wasi reactor module that co
 
   - the tree-sitter core library        MIT            LICENSES/tree-sitter.txt
   - one tree-sitter grammar             see its file   LICENSES/<language>.txt
-  - DiffDuck's shim (../shim/shim.c)    this repository's licence
+  - diffduck's shim (../shim/shim.c)    this repository's licence
   - wasi-libc, linked in by zig         Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT,
                                         with musl (MIT), dlmalloc (CC0), and cloudlibc
                                         (BSD-2-Clause) portions   LICENSES/wasi-libc.txt

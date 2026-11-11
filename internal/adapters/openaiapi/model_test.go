@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/arrno/diff-duck/internal/services/ports"
+	"github.com/arrno/diffduck/internal/services/ports"
 )
 
 const key = "sk-test-SECRET-0123456789"

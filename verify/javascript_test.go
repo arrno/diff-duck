@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/arrno/diff-duck/internal/domain"
+	"github.com/arrno/diffduck/internal/domain"
 )
 
 const jsCartBase = `import { api } from "./api";

@@ -7,7 +7,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/arrno/diff-duck/internal/domain"
+	"github.com/arrno/diffduck/internal/domain"
 )
 
 // JavaScript and TypeScript are one language family with one extractor. tree-sitter-javascript

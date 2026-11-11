@@ -7,7 +7,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/arrno/diff-duck/internal/domain"
+	"github.com/arrno/diffduck/internal/domain"
 )
 
 //go:embed wasm/python.wasm

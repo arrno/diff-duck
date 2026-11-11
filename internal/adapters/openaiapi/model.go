@@ -1,7 +1,7 @@
 // Package openaiapi implements ports.LanguageModel with the OpenAI Responses API.
 //
 // It calls one endpoint, POST /v1/responses, with net/http instead of the official SDK, which
-// alone added about 30 MB to the binary. The wire types below model only the fields DiffDuck
+// alone added about 30 MB to the binary. The wire types below model only the fields diffduck
 // sends and reads; transport.go owns HTTP, retries, and error translation.
 //
 // Requests use strict structured outputs, so the request schema must follow OpenAI's strict
@@ -16,7 +16,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/arrno/diff-duck/internal/services/ports"
+	"github.com/arrno/diffduck/internal/services/ports"
 )
 
 // maxOutputTokens bounds one answer, reasoning included.
@@ -48,7 +48,7 @@ func newWithOptions(apiKey, model, effort string, opts ...option) (*Model, error
 // Describe identifies this configuration. It never includes the key.
 func (m *Model) Describe() string { return fmt.Sprintf("openai-api/%s/%s", m.model, m.effort) }
 
-// wireRequest is the subset of the Responses API request body DiffDuck sends.
+// wireRequest is the subset of the Responses API request body diffduck sends.
 type wireRequest struct {
 	Model           string     `json:"model"`
 	Instructions    string     `json:"instructions"`
@@ -74,7 +74,7 @@ type reasoning struct {
 	Effort string `json:"effort"`
 }
 
-// wireResponse is the subset of a Responses API response DiffDuck reads.
+// wireResponse is the subset of a Responses API response diffduck reads.
 type wireResponse struct {
 	Status            string `json:"status"`
 	IncompleteDetails *struct {

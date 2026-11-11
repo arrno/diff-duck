@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/arrno/diff-duck/internal/domain"
+	"github.com/arrno/diffduck/internal/domain"
 )
 
 func unit(t *testing.T, src, name string) domain.Unit {

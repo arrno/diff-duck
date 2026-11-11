@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/arrno/diff-duck/internal/domain"
+	"github.com/arrno/diffduck/internal/domain"
 )
 
 // appCLI runs the app commands against their own home directory, so they never touch the

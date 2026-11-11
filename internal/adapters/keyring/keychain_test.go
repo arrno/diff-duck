@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/arrno/diff-duck/internal/domain"
-	"github.com/arrno/diff-duck/internal/services/ports"
+	"github.com/arrno/diffduck/internal/domain"
+	"github.com/arrno/diffduck/internal/services/ports"
 	gokeyring "github.com/zalando/go-keyring"
 )
 
@@ -114,5 +114,39 @@ func TestAKeyTooLongForTheKeychainSaysSo(t *testing.T) {
 	err := New().SaveKey(domain.ProviderAnthropicAPI, secret)
 	if err == nil || !strings.Contains(err.Error(), "too long") {
 		t.Errorf("got %v", err)
+	}
+}
+
+func TestAKeySavedUnderTheOldNameIsMovedOnFirstRead(t *testing.T) {
+	gokeyring.MockInit()
+	if err := gokeyring.Set(LegacyService, "anthropic-api", secret); err != nil {
+		t.Fatal(err)
+	}
+	k := New()
+	if has, err := k.HasKey(domain.ProviderAnthropicAPI); err != nil || !has {
+		t.Fatalf("legacy key not found: %v %v", has, err)
+	}
+	if got, err := gokeyring.Get(Service, "anthropic-api"); err != nil || got != secret {
+		t.Errorf("key was not moved to %q: %q, %v", Service, got, err)
+	}
+	if _, err := gokeyring.Get(LegacyService, "anthropic-api"); !errors.Is(err, gokeyring.ErrNotFound) {
+		t.Errorf("key still under %q: %v", LegacyService, err)
+	}
+	if got, err := k.LoadKey(domain.ProviderAnthropicAPI); err != nil || got != secret {
+		t.Errorf("loaded %q, %v", got, err)
+	}
+}
+
+func TestClearingAKeyAlsoClearsItUnderTheOldName(t *testing.T) {
+	gokeyring.MockInit()
+	if err := gokeyring.Set(LegacyService, "openai-api", secret); err != nil {
+		t.Fatal(err)
+	}
+	k := New()
+	if err := k.ClearKey(domain.ProviderOpenAIAPI); err != nil {
+		t.Fatal(err)
+	}
+	if has, err := k.HasKey(domain.ProviderOpenAIAPI); err != nil || has {
+		t.Errorf("a cleared legacy key came back: %v %v", has, err)
 	}
 }

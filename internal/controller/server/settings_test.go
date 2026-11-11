@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/arrno/diff-duck/internal/domain"
-	"github.com/arrno/diff-duck/internal/services"
+	"github.com/arrno/diffduck/internal/domain"
+	"github.com/arrno/diffduck/internal/services"
 )
 
 var _ SettingsKeeper = (*services.SettingsKeeper)(nil)

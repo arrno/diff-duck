@@ -13,8 +13,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/arrno/diff-duck/internal/domain"
-	"github.com/arrno/diff-duck/internal/services/ports"
+	"github.com/arrno/diffduck/internal/domain"
+	"github.com/arrno/diffduck/internal/services/ports"
 
 	"modernc.org/sqlite" // Also registers the database driver.
 	sqlite3 "modernc.org/sqlite/lib"
@@ -137,7 +137,7 @@ func (s *Store) clearDiffs(ctx context.Context) error {
 		return fmt.Errorf("delete saved diffs: %w", err)
 	}
 	if busy != 0 || logFrames != 0 {
-		return fmt.Errorf("saved diffs were deleted, but %w: stop any other DiffDuck and run reset again to remove their last copies", ErrDatabaseInUse)
+		return fmt.Errorf("saved diffs were deleted, but %w: stop any other diffduck and run reset again to remove their last copies", ErrDatabaseInUse)
 	}
 	return nil
 }

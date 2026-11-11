@@ -3,7 +3,7 @@ package services
 import (
 	"context"
 
-	"github.com/arrno/diff-duck/internal/domain"
+	"github.com/arrno/diffduck/internal/domain"
 )
 
 // dirPackages is what is known of the packages a directory's files declare at one commit.

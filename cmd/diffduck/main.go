@@ -7,7 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/arrno/diff-duck/internal/controller/cli"
+	"github.com/arrno/diffduck/internal/controller/cli"
 )
 
 func main() {

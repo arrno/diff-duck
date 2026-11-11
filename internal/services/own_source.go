@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/arrno/diff-duck/internal/domain"
+	"github.com/arrno/diffduck/internal/domain"
 )
 
 // Own source: what a container unit is explained from when it is a leaf. Its members are units

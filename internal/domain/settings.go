@@ -2,7 +2,7 @@ package domain
 
 import "errors"
 
-// ErrUnknownProvider is returned when a model provider is not one DiffDuck offers.
+// ErrUnknownProvider is returned when a model provider is not one diffduck offers.
 var ErrUnknownProvider = errors.New("unknown model provider: choose claude-code, codex, anthropic-api, or openai-api")
 
 // ErrUnknownReadingLevel is returned when a reading level is not one of the five levels.
@@ -36,7 +36,7 @@ func ParseModelProvider(s string) (ModelProvider, error) {
 	return p, nil
 }
 
-// Valid reports whether the provider is one DiffDuck offers.
+// Valid reports whether the provider is one diffduck offers.
 func (p ModelProvider) Valid() bool { return p.Label() != "" }
 
 // Label is the provider's name as a person reads it. It is empty for an unknown provider.

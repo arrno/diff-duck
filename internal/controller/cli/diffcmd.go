@@ -11,8 +11,8 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/arrno/diff-duck/internal/controller/server"
-	"github.com/arrno/diff-duck/internal/domain"
+	"github.com/arrno/diffduck/internal/controller/server"
+	"github.com/arrno/diffduck/internal/domain"
 )
 
 const diffUsage = `Usage:
