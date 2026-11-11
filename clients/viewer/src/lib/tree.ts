@@ -86,6 +86,34 @@ export function packagesOf(roots: DiffNode[], outcomeId: string): DiffNode[] {
 }
 
 /** Largest change first, so the most significant package leads. */
-export function bySize(a: DiffNode, b: DiffNode): number {
-  return b.added + b.removed - (a.added + a.removed) || a.name.localeCompare(b.name);
+/**
+ * Orders packages by directory, one path segment at a time, so a directory's subdirectories
+ * follow it directly: "src", "src/components/x", then "src-utils". Packages that share a
+ * directory, such as two C# namespaces, follow their label.
+ */
+export function byPath(a: DiffNode, b: DiffNode): number {
+  const x = a.name.split("/"), y = b.name.split("/");
+  for (let i = 0; i < Math.min(x.length, y.length); i++) {
+    if (x[i] !== y[i]) return x[i] < y[i] ? -1 : 1;
+  }
+  return x.length - y.length || (a.signature ?? "").localeCompare(b.signature ?? "");
+}
+
+/**
+ * Shortens a long name in the middle with "…". A path keeps its first directory and as many of
+ * its last segments as fit, since the file name is what tells paths apart.
+ */
+export function abbreviate(name: string, max = 72): string {
+  if (name.length <= max) return name;
+  const parts = name.split("/");
+  if (parts.length > 2) {
+    let tail = parts[parts.length - 1];
+    for (let i = parts.length - 2; i > 0 && parts[0].length + tail.length + parts[i].length + 4 <= max; i--) {
+      tail = `${parts[i]}/${tail}`;
+    }
+    const short = `${parts[0]}/…/${tail}`;
+    if (short.length <= max) return short;
+  }
+  const front = Math.ceil((max - 1) * 0.4);
+  return `${name.slice(0, front)}…${name.slice(name.length - (max - 1 - front))}`;
 }

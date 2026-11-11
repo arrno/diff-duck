@@ -899,8 +899,25 @@ func (b *treeBuilder) finish(packageExists func(domain.PackageRef, domain.Change
 		if (a.Kind == domain.KindPackage) != (c.Kind == domain.KindPackage) {
 			return a.Kind == domain.KindPackage
 		}
+		if a.Kind == domain.KindPackage {
+			if x, y := b.refs[a.ID], b.refs[c.ID]; x.Dir != y.Dir {
+				return pathLess(x.Dir, y.Dir)
+			}
+		}
 		return a.ID < c.ID
 	})
+}
+
+// pathLess orders paths one segment at a time, so a directory's subdirectories follow it
+// directly: "src", "src/components/x", then "src-utils".
+func pathLess(a, b string) bool {
+	x, y := strings.Split(a, "/"), strings.Split(b, "/")
+	for i := 0; i < len(x) && i < len(y); i++ {
+		if x[i] != y[i] {
+			return x[i] < y[i]
+		}
+	}
+	return len(x) < len(y)
 }
 
 func rollUpOp(pkg *domain.Node) domain.ChangeOp {

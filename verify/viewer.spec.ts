@@ -295,3 +295,43 @@ test("an empty diff says so", async ({ page }) => {
   await expect(page.getByTestId("tree")).toContainText("No changes between these commits.");
   expect(errors).toEqual([]);
 });
+
+test("packages follow their parent directory, and a long name never moves the badge", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 740 });
+  await open(page, "paths");
+  const rows = page.locator('[data-testid="tree"] li[data-node-id*="|"]').filter({ has: page.getByTestId("package-name") });
+  await expect(rows).toHaveCount(3);
+  const ids = await rows.evaluateAll((els) => els.map((e) => e.getAttribute("data-node-id")));
+  expect(ids).toEqual([
+    "apps/portal/src|src",
+    "apps/portal/src/components/session-clock|session-clock",
+    "apps/portal/src-utils|src-utils",
+  ]);
+  // The footer names the binary that wrote the page, not a placeholder.
+  await expect(page.getByTestId("app-version")).toHaveText(/^(v\d+\.\d+\.\d+\S*|devel)$/);
+
+  const file = page.locator('li[data-node-id$="a-very-long-file-name-that-keeps-going.md"]');
+  const name = file.getByTestId("abbreviated-name");
+  await expect(name.locator("[aria-hidden]")).toHaveText(/^docs\/…\/.*keeps-going\.md$/);
+  const full = "docs/architecture/decisions/2026/accepted/a-very-long-directory-name-for-layout/a-very-long-file-name-that-keeps-going.md";
+  await expect(name.locator(".sr-only")).toHaveText(full);
+  // The badge stays left of the name, and nothing spills past the page.
+  const badge = file.getByText("CHANGE", { exact: true });
+  const [b, n] = [await badge.boundingBox(), await name.boundingBox()];
+  expect(b && n && b.x + b.width <= n.x).toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+  // The full name shows on hover and on keyboard focus, and goes away again.
+  await name.hover();
+  await expect(page.getByRole("tooltip")).toHaveText(full);
+  // A real pointer moves in steps; the tooltip stays open while one heads into it, so its text
+  // can be selected.
+  await page.mouse.move(0, 0, { steps: 10 });
+  await page.mouse.move(5, 5, { steps: 2 });
+  await expect(page.getByRole("tooltip")).toHaveCount(0);
+  await name.focus();
+  await expect(page.getByRole("tooltip")).toHaveText(full);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("tooltip")).toHaveCount(0);
+  await expect(new AxeBuilder({ page }).analyze().then((r) => r.violations)).resolves.toEqual([]);
+});

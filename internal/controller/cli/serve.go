@@ -118,7 +118,7 @@ func serve(ctx context.Context, opts serveOptions, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	page, err := htmlview.RenderApp()
+	page, err := htmlview.RenderApp(currentVersion())
 	if err != nil {
 		return err
 	}

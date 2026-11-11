@@ -281,3 +281,14 @@ func TestCancellationStopsTheDifferAtTheFailingFile(t *testing.T) {
 		})
 	}
 }
+
+func TestPackagesSortBySubdirectoryFirst(t *testing.T) {
+	sorted := []string{".", "src", "src/components", "src/components/some-service", "src-utils", "web"}
+	for i := range sorted {
+		for j := range sorted {
+			if got := pathLess(sorted[i], sorted[j]); got != (i < j) {
+				t.Errorf("pathLess(%q, %q) = %v", sorted[i], sorted[j], got)
+			}
+		}
+	}
+}

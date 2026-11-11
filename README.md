@@ -38,7 +38,21 @@ Also:
 - **Agent friendly.** One command builds a diff and prints its link, so your coding agent can
   "diffduck it" for you.
 
-Go, Python, JavaScript/TypeScript, Rust, C#, and Java code gets the full structural tree. Other files appear as file-level changes.
+## Supported languages
+
+These get the full structural tree, down to types, functions, and members:
+
+| Language | Files |
+| --- | --- |
+| Go | `.go` |
+| Python | `.py` |
+| JavaScript | `.js` `.jsx` `.mjs` `.cjs` |
+| TypeScript | `.ts` `.tsx` `.mts` `.cts` |
+| Rust | `.rs` |
+| C# | `.cs` |
+| Java | `.java` |
+
+Every other file still appears, as a file-level change, so nothing in the diff is left out.
 
 ## Install
 
