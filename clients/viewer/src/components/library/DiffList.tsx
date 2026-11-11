@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { LineStats } from "@/components/diff/visuals";
 import { deleteDiff, listDiffs, type SavedDiff } from "@/lib/api";
 import { elapsed, repositoryName, shortRef, timeAgo } from "@/lib/format";
@@ -32,11 +33,39 @@ function DiffRow({ diff, onDelete }: { diff: SavedDiff; onDelete: () => Promise<
             <span className="font-mono break-all">{shortRef(diff.base)} → {shortRef(diff.head)}</span>
             {diff.status === "done" && <span>{diff.files} files</span>}
             {diff.status === "done" && <LineStats added={diff.added} removed={diff.removed} />}
+            {/* Where the counts will be once the diff is built. */}
+            {diff.status === "running" && <><Skeleton className="h-3 w-12" /><Skeleton className="h-3 w-16" /></>}
           </p>
           <DeleteButton label={diff.status === "running" ? "Stop and delete" : "Delete"} onDelete={onDelete} />
         </div>
       </Card>
     </li>
+  );
+}
+
+/** Cards in the shape of saved diffs, while the list loads. */
+function ListSkeleton() {
+  return (
+    <div role="status" data-testid="diffs-loading">
+      <span className="sr-only">Loading your diffs…</span>
+      <ul className="space-y-3">
+        {[0, 1, 2].map((i) => (
+          <li key={i}>
+            <Card className="gap-3 rounded-lg p-4 shadow-none">
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex items-center gap-2"><Skeleton className="size-7 rounded-full" /><Skeleton className="h-3 w-12" /></span>
+                <Skeleton className="h-3 w-16" />
+              </div>
+              <Skeleton className={i % 2 ? "h-5 w-2/3" : "h-5 w-5/6"} />
+              <div className="flex items-center justify-between gap-4">
+                <span className="flex items-center gap-3"><Skeleton className="h-3 w-20" /><Skeleton className="h-3 w-28" /></span>
+                <Skeleton className="h-8 w-20" />
+              </div>
+            </Card>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -80,7 +109,7 @@ export function DiffList() {
         {diffs && diffs.length > 0 && <NewDiffLink />}
       </div>
       {error && <p role="alert" className="text-sm text-remove">{error}</p>}
-      {diffs === null && !error && <p role="status" className="text-muted-foreground">Loading…</p>}
+      {diffs === null && !error && <ListSkeleton />}
       {diffs?.length === 0 && (
         <div data-testid="no-diffs" className="space-y-4 py-12 text-center">
           <p className="text-lg font-medium">No diffs yet</p>

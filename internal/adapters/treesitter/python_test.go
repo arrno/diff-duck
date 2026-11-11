@@ -100,7 +100,7 @@ async def main():
 
 func TestPythonUnitsNamesKindsNestingAndLines(t *testing.T) {
 	a := analyzePy(t, newTestRuntime(t), "app/core/util.py", sample)
-	if a.Package != (domain.PackageRef{Dir: "app/core", Name: "core"}) {
+	if a.Package != (domain.PackageRef{Dir: "app/core", Name: "core", Hierarchical: true}) {
 		t.Errorf("package %+v", a.Package)
 	}
 	if a.Test || a.Generated {
@@ -196,7 +196,7 @@ func TestPythonSignaturesDocsAndSource(t *testing.T) {
 func TestPythonPackageAndModuleNaming(t *testing.T) {
 	rt := newTestRuntime(t)
 	root := analyzePy(t, rt, "setup.py", "x = 1\n")
-	if root.Package != (domain.PackageRef{Dir: ".", Name: ""}) || root.Units[0].Signature != "module setup.py" {
+	if root.Package != (domain.PackageRef{Dir: ".", Name: "", Hierarchical: true}) || root.Units[0].Signature != "module setup.py" {
 		t.Errorf("root module: %+v %q", root.Package, root.Units[0].Signature)
 	}
 	init := analyzePy(t, rt, "pkg/__init__.py", "")

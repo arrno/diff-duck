@@ -84,7 +84,7 @@ record Point(int x, @Deprecated int y) implements Store {
 
 func TestJavaUnitsNamesKindsNestingAndLines(t *testing.T) {
 	a := analyzeJava(t, newTestRuntime(t), "src/main/java/com/example/app/Repo.java", javaSample)
-	if a.Package != (domain.PackageRef{Dir: "src/main/java/com/example/app", Name: "com.example.app"}) {
+	if a.Package != (domain.PackageRef{Dir: "src/main/java/com/example/app", Name: "com.example.app", Hierarchical: true}) {
 		t.Errorf("package %+v", a.Package)
 	}
 	if a.Test || a.Generated {
@@ -178,10 +178,10 @@ func TestJavaUnitsNamesKindsNestingAndLines(t *testing.T) {
 
 func TestJavaPackageWithoutDeclaration(t *testing.T) {
 	rt := newTestRuntime(t)
-	if a := analyzeJava(t, rt, "tools/Main.java", "class Main {}\n"); a.Package != (domain.PackageRef{Dir: "tools", Name: "tools"}) {
+	if a := analyzeJava(t, rt, "tools/Main.java", "class Main {}\n"); a.Package != (domain.PackageRef{Dir: "tools", Name: "tools", Hierarchical: true}) {
 		t.Errorf("a file with no package takes its directory's name: %+v", a.Package)
 	}
-	if a := analyzeJava(t, rt, "Main.java", "class Main {}\n"); a.Package != (domain.PackageRef{Dir: ".", Name: ""}) {
+	if a := analyzeJava(t, rt, "Main.java", "class Main {}\n"); a.Package != (domain.PackageRef{Dir: ".", Name: "", Hierarchical: true}) {
 		t.Errorf("root default package: %+v", a.Package)
 	}
 	a := analyzeJava(t, rt, "a/b/Main.java", "package  com . x ;\nclass Main {}\n")

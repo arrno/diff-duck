@@ -295,7 +295,7 @@ test("picks commits, creates a diff, and opens it", async ({ page }) => {
   await expect(page).toHaveTitle(/ · DiffDuck$/);
   await expect(page.getByTestId("outcomes")).toBeVisible();
   // The run records the saved reading level; the pinned scripted adapter is no provider.
-  await expect(page.getByTestId("generation")).toContainText("Reading level: 6th grade.");
+  await expect(page.getByTestId("generation")).toContainText("Reading level: 6th grade");
   await expect(page.getByTestId("generation")).not.toContainText("Provider:");
   // The delete button sits with the tree's other controls, and the name leads home.
   const controls = page.locator("#changes").getByRole("button", { name: "Expand all" }).locator("..");
@@ -333,7 +333,8 @@ test("a diff names the provider that wrote it", async ({ page }) => {
   });
   await page.goto(app);
   await page.getByTestId("diff-row").getByRole("link").click();
-  await expect(page.getByTestId("generation")).toContainText("Provider: Codex. Model:");
+  await expect(page.getByTestId("generation")).toContainText("Provider: Codex");
+  await expect(page.getByTestId("generation").getByRole("listitem").first()).toHaveText("Provider: Codex");
 });
 
 test("a bad commit fails visibly and can be retried or deleted", async ({ page }) => {
@@ -411,4 +412,75 @@ test("another site's page cannot read or change saved diffs", async ({ page }) =
   await page.goto(app);
   // A valid request, so only the refusal can explain no new diff appearing.
   await expect(page.getByTestId("diff-row")).toHaveCount(1);
+});
+
+/** Holds back matching requests to the real server until release() is called. */
+async function holdRequests(page: Page, url: RegExp) {
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route(url, async (route) => { await held; await route.continue(); });
+  return release;
+}
+
+const animation = (locator: ReturnType<Page["locator"]>) => locator.first().evaluate((e) => getComputedStyle(e).animationName);
+
+test("the list shows placeholder cards while it loads", async ({ page }) => {
+  const errors = await watchErrors(page);
+  const release = await holdRequests(page, /\/api\/diffs$/);
+  await page.goto(app);
+  const loading = page.getByTestId("diffs-loading");
+  await expect(loading).toBeVisible();
+  await expect(loading).toHaveRole("status");
+  await expect(loading).toContainText("Loading your diffs");
+  await expect(loading.locator('[data-slot="skeleton"]').first()).toBeVisible();
+  await noViolations(page);
+  release();
+  await expect(loading).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test("a diff page shows its layout in placeholders while it loads", async ({ page }) => {
+  const created = await (await page.request.post(`${app}api/diffs`, { data: { repository: fixture, base: "base", head: "head" } })).json();
+  await expect.poll(async () => (await (await page.request.get(`${app}api/diffs/${created.id}`)).json()).status).toBe("done");
+
+  const release = await holdRequests(page, new RegExp(`/api/diffs/${created.id}$`));
+  await page.goto(`${app}#/diffs/${created.id}`);
+  const loading = page.getByTestId("diff-loading");
+  await expect(loading).toBeVisible();
+  await expect(loading).toContainText("Loading this diff");
+  await noViolations(page);
+  release();
+  await expect(loading).toHaveCount(0);
+  await expect(page.getByTestId("overview")).toBeVisible();
+});
+
+test("a diff that is still building spins, and previews where its result will appear", async ({ page }) => {
+  const slow = process.env.SLOW_APP_URL as string;
+  const created = await (await page.request.post(`${slow}api/diffs`, { data: { repository: fixture, base: "base", head: "head" } })).json();
+  try {
+    await page.goto(slow);
+    const row = page.getByTestId("diff-row").filter({ hasText: "Running" });
+    await expect(row).toHaveCount(1);
+    expect(await animation(row.locator("svg.animate-spin"))).not.toBe("none");
+    // Placeholders stand where the file and line counts will be.
+    await expect(row.locator('[data-slot="skeleton"]')).toHaveCount(2);
+    await noViolations(page);
+
+    await row.getByRole("link").click();
+    await expect(page.getByTestId("stage")).toHaveRole("status");
+    // One spinner: the running mark, as on the list.
+    const spinner = page.locator(".animate-spin");
+    await expect(spinner).toHaveCount(1);
+    expect(await animation(spinner)).not.toBe("none");
+    await expect(page.getByTestId("diff-preview").locator('[data-slot="skeleton"]').first()).toBeVisible();
+    await noViolations(page);
+
+    // With reduced motion, nothing spins or pulses; the words still say what is happening.
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    expect(await animation(spinner)).toBe("none");
+    expect(await animation(page.getByTestId("diff-preview").locator('[data-slot="skeleton"]'))).toBe("none");
+    await expect(page.getByTestId("stage")).toHaveText(/…$/);
+  } finally {
+    await page.request.delete(`${slow}api/diffs/${created.id}`);
+  }
 });

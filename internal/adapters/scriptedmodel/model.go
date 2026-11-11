@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/arrno/diff-duck/internal/services/ports"
 )
@@ -23,7 +24,12 @@ const (
 	// Partial omits every second summary, invents a summary for an unknown ID, and references
 	// an unknown node from an outcome.
 	Partial Behavior = "partial"
+	// Slow answers like Normal after a delay per call, so a diff stays visibly in progress.
+	Slow Behavior = "slow"
 )
+
+// slowDelay is how long each Slow call takes.
+const slowDelay = 2 * time.Second
 
 // Model is the scripted model.
 type Model struct{ behavior Behavior }
@@ -32,7 +38,7 @@ type Model struct{ behavior Behavior }
 // silently run as another one.
 func New(b Behavior) (*Model, error) {
 	switch b {
-	case Normal, Fail, Partial:
+	case Normal, Fail, Partial, Slow:
 		return &Model{behavior: b}, nil
 	}
 	return nil, fmt.Errorf("unknown scripted behavior %q", b)
@@ -57,7 +63,14 @@ type incoming struct {
 }
 
 // Complete returns output derived from the request's input.
-func (m *Model) Complete(_ context.Context, req ports.ModelRequest) (ports.ModelResponse, error) {
+func (m *Model) Complete(ctx context.Context, req ports.ModelRequest) (ports.ModelResponse, error) {
+	if m.behavior == Slow {
+		select {
+		case <-ctx.Done():
+			return ports.ModelResponse{}, ctx.Err()
+		case <-time.After(slowDelay):
+		}
+	}
 	if m.behavior == Fail {
 		return ports.ModelResponse{}, errors.New("scripted failure")
 	}

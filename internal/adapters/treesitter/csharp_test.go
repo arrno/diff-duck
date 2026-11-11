@@ -107,7 +107,7 @@ namespace Acme.Store
 
 func TestCSharpUnitsNamesKindsNestingAndLines(t *testing.T) {
 	a := analyzeCs(t, newTestRuntime(t), "src/Store/Repo.cs", csSample)
-	pkg := domain.PackageRef{Dir: "src/Store", Name: "Acme.Store"}
+	pkg := domain.PackageRef{Dir: "src/Store", Name: "Acme.Store", Hierarchical: true}
 	if a.Package != pkg {
 		t.Errorf("package %+v", a.Package)
 	}
@@ -210,15 +210,15 @@ func TestCSharpSignaturesDocsAndSource(t *testing.T) {
 func TestCSharpNamespaces(t *testing.T) {
 	rt := newTestRuntime(t)
 	fileScoped := analyzeCs(t, rt, "src/App/Svc.cs", "namespace Acme.App;\n\npublic class Svc { }\n")
-	if fileScoped.Package != (domain.PackageRef{Dir: "src/App", Name: "Acme.App"}) || fileScoped.Units[0].Package != fileScoped.Package {
+	if fileScoped.Package != (domain.PackageRef{Dir: "src/App", Name: "Acme.App", Hierarchical: true}) || fileScoped.Units[0].Package != fileScoped.Package {
 		t.Errorf("file-scoped namespace: %+v %+v", fileScoped.Package, fileScoped.Units[0].Package)
 	}
 	global := analyzeCs(t, rt, "src/App/G.cs", "class G { }\n")
-	if global.Package != (domain.PackageRef{Dir: "src/App", Name: "App"}) {
+	if global.Package != (domain.PackageRef{Dir: "src/App", Name: "App", Hierarchical: true}) {
 		t.Errorf("the global namespace is named after the directory: %+v", global.Package)
 	}
 	root := analyzeCs(t, rt, "G.cs", "class G { }\n")
-	if root.Package != (domain.PackageRef{Dir: "."}) {
+	if root.Package != (domain.PackageRef{Dir: ".", Hierarchical: true}) {
 		t.Errorf("the global namespace at the root: %+v", root.Package)
 	}
 
@@ -231,11 +231,11 @@ func TestCSharpNamespaces(t *testing.T) {
 namespace Other.Ns { class C { void M() { } } }
 class D { }
 `)
-	if multi.Package != (domain.PackageRef{Dir: "lib", Name: "Outer"}) {
+	if multi.Package != (domain.PackageRef{Dir: "lib", Name: "Outer", Hierarchical: true}) {
 		t.Errorf("file package %+v", multi.Package)
 	}
 	for name, ns := range map[string]string{"A": "Outer.Inner", "B": "Outer", "C": "Other.Ns", "C.M()": "Other.Ns", "D": "lib"} {
-		if u := unitsByName(multi)[name]; u.Package != (domain.PackageRef{Dir: "lib", Name: ns}) {
+		if u := unitsByName(multi)[name]; u.Package != (domain.PackageRef{Dir: "lib", Name: ns, Hierarchical: true}) {
 			t.Errorf("%s: package %+v, want %s", name, u.Package, ns)
 		}
 	}
@@ -388,7 +388,7 @@ func TestCSharpTopLevelStatements(t *testing.T) {
 	a := analyzeCs(t, newTestRuntime(t), "app/Program.cs", "using System;\n\nvar app = Build(args);\nConsole.WriteLine(app);\n\nstatic int Build(string[] a) => a.Length;\n\nclass Helper { }\n")
 	got := unitsByName(a)
 	top := got[csTopLevel]
-	if top.Kind != domain.KindFunction || top.StartLine != 3 || top.EndLine != 6 || top.Package != (domain.PackageRef{Dir: "app", Name: "app"}) || top.Parent != "" {
+	if top.Kind != domain.KindFunction || top.StartLine != 3 || top.EndLine != 6 || top.Package != (domain.PackageRef{Dir: "app", Name: "app", Hierarchical: true}) || top.Parent != "" {
 		t.Errorf("top-level statements: %+v", top)
 	}
 	if got["Helper"].Kind != domain.KindClass || len(a.Units) != 2 {

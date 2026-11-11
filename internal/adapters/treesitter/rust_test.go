@@ -123,7 +123,7 @@ mod tests {
 
 func TestRustUnitsNamesKindsNestingAndLines(t *testing.T) {
 	a := analyzeRs(t, newTestRuntime(t), "crates/geo/src/shapes.rs", rsSample)
-	if a.Package != (domain.PackageRef{Dir: "crates/geo/src", Name: "src"}) {
+	if a.Package != (domain.PackageRef{Dir: "crates/geo/src", Name: "src", Hierarchical: true}) {
 		t.Errorf("package %+v", a.Package)
 	}
 	if a.Test || a.Generated || a.Constraints != "" {
@@ -586,11 +586,11 @@ func TestRustConstraintsAndGenerated(t *testing.T) {
 func TestRustModuleNamingAndEmptyFile(t *testing.T) {
 	rt := newTestRuntime(t)
 	root := analyzeRs(t, rt, "build.rs", "fn main() {}\n")
-	if root.Package != (domain.PackageRef{Dir: ".", Name: ""}) || root.Units[0].Name != "build" || root.Units[1].Name != "build.main()" {
+	if root.Package != (domain.PackageRef{Dir: ".", Name: "", Hierarchical: true}) || root.Units[0].Name != "build" || root.Units[1].Name != "build.main()" {
 		t.Errorf("root module: %+v %+v", root.Package, root.Units)
 	}
 	mod := analyzeRs(t, rt, "src/net/mod.rs", "")
-	if mod.Package != (domain.PackageRef{Dir: "src/net", Name: "net"}) || len(mod.Units) != 1 || mod.Units[0].Name != "mod" || mod.Units[0].EndLine != 1 {
+	if mod.Package != (domain.PackageRef{Dir: "src/net", Name: "net", Hierarchical: true}) || len(mod.Units) != 1 || mod.Units[0].Name != "mod" || mod.Units[0].EndLine != 1 {
 		t.Errorf("empty mod.rs: %+v", mod)
 	}
 }
